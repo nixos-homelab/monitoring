@@ -7,7 +7,7 @@
 }:
 let
   cfg = config.homelab.services.metrics-server;
-  hllib = inputs.shared.lib;
+  hllib = inputs.homelab-shared.lib;
   kubelib = inputs.kube-generators.lib { inherit pkgs; };
 in
 {

@@ -6,7 +6,7 @@
 }:
 let
   cfg = config.homelab.services.node-exporter;
-  hllib = inputs.shared.lib;
+  hllib = inputs.homelab-shared.lib;
 in
 {
   options.homelab.services.node-exporter = {
