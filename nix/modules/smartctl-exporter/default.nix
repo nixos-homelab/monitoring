@@ -123,7 +123,7 @@ in
         apiVersion = "cluster.local";
         kind = "ServiceNetpols";
         metadata.name = "smartctl-exporter";
-        spec.toPortsFlattened = [ 9633 ];
+        spec.ports = [ 9633 ];
       };
     };
   };

@@ -112,7 +112,7 @@ in
         apiVersion = "cluster.local";
         kind = "ServiceNetpols";
         metadata.name = "zfs-exporter";
-        spec.toPortsFlattened = [ 9134 ];
+        spec.ports = [ 9134 ];
       };
     };
   };

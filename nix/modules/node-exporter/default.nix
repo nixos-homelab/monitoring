@@ -28,7 +28,7 @@ in
         apiVersion = "cluster.local";
         kind = "ServiceNetpols";
         metadata.name = "node-exporter";
-        spec.toPortsFlattened = [ 9100 ];
+        spec.ports = [ 9100 ];
       };
     };
   };

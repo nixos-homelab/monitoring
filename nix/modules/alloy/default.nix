@@ -123,7 +123,7 @@ in
           apiVersion = "cluster.local";
           kind = "ServiceNetpols";
           metadata.name = "alloy";
-          spec.toPortsFlattened = [ 3000 ];
+          spec.ports = [ 3000 ];
         };
       };
     };

@@ -81,7 +81,7 @@ in
         kind = "ServiceNetpols";
         metadata.namespace = "kube-system";
         metadata.name = "metrics-server";
-        spec.toPortsFlattened = [ 10250 ];
+        spec.ports = [ 10250 ];
       };
     };
   };
