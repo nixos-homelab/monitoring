@@ -33,7 +33,7 @@ in
           kind = "ConfigMap";
           metadata = {
             namespace = "alloy";
-            name = "config";
+            name = "alloy";
             labels."app.kubernetes.io/name" = "alloy";
           };
           data."alloy-config.alloy" = builtins.readFile ./alloy-config.alloy;
@@ -102,7 +102,7 @@ in
                 ];
                 volumeMountsByPath."/etc/alloy" = "config";
               };
-              volumesByName.config.configMap.name = "config";
+              volumesByName.config.configMap.name = "alloy";
               volumesByName.data.persistentVolumeClaim.claimName = "alloy";
             };
           };

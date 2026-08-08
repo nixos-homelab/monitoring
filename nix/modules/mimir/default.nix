@@ -24,7 +24,7 @@ in
         apiVersion = "v1";
         kind = "ConfigMap";
         metadata.namespace = "mimir";
-        metadata.name = "config";
+        metadata.name = "mimir";
         data."mimir.yaml" = builtins.toJSON {
           multitenancy_enabled = false;
           target = lib.concatStringsSep "," [
@@ -92,7 +92,7 @@ in
               httpGet.port = "web";
             };
           };
-          servicePodSpec.volumesByName.config.configMap.name = "config";
+          servicePodSpec.volumesByName.config.configMap.name = "mimir";
         };
       };
     };

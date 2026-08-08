@@ -33,7 +33,7 @@ in
         apiVersion = "v1";
         kind = "ConfigMap";
         metadata.namespace = "grafana";
-        metadata.name = "config";
+        metadata.name = "grafana";
         data."grafana.ini" = builtins.readFile ./grafana.ini;
         data."datasources.yaml" = builtins.toJSON {
           apiVersion = 1;
@@ -90,7 +90,7 @@ in
               };
             };
             volumesByName = {
-              config.configMap.name = "config";
+              config.configMap.name = "grafana";
               tmp.emptyDir = { };
             };
           };
