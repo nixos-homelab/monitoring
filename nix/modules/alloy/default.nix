@@ -7,7 +7,7 @@
 }:
 let
   cfg = config.homelab.services.alloy;
-  hllib = inputs.homelab.lib;
+  hllib = inputs.shared.lib;
 in
 {
   options.homelab.services.alloy = {

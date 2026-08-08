@@ -16,7 +16,7 @@ in
       default = "grafana/grafana:12.2.1";
     };
   };
-  imports = [ inputs.homelab.nixosModules.postgresql ] ++ self.lib.importsApply [ ./homepage.nix ];
+  imports = [ inputs.shared.nixosModules.postgresql ] ++ self.lib.importsApply [ ./homepage.nix ];
   config = lib.mkIf cfg.enable {
     homelab.services.postgresql.databases.grafana.backup.enable = lib.mkDefault true;
     assertions = [

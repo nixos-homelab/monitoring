@@ -15,7 +15,7 @@ in
       default = config.homelab.services.metrics-server.enable && config.homelab.services.homepage.enable;
     };
   };
-  imports = [ inputs.homelab.nixosModules.homepage ];
+  imports = [ inputs.shared.nixosModules.homepage ];
   config = lib.mkIf cfg.enable {
     homelab.services.homepage = {
       widgets.resources = {

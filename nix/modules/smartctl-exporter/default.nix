@@ -8,7 +8,7 @@
 let
   ccfg = config.homelab.cluster;
   cfg = config.homelab.services.smartctl-exporter;
-  hllib = inputs.homelab.lib;
+  hllib = inputs.shared.lib;
   smartctlExporter = pkgs.buildGo125Module rec {
     name = "smartctl_exporter";
     version = "0.14.0-1";
