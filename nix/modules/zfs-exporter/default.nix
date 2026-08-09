@@ -74,31 +74,23 @@ in
         };
       };
       daemonset = {
-        kind = "DaemonSet";
-        apiVersion = "apps/v1";
-        metadata = {
-          namespace = "zfs-exporter";
+        apiVersion = "cluster.local";
+        kind = "DaemonSetMacro";
+        metadata.name = "zfs-exporter";
+        spec.podSpecMacro = {
           name = "zfs-exporter";
-          labels."app.kubernetes.io/name" = "zfs-exporter";
-        };
-        spec = {
-          selector.matchLabels."app.kubernetes.io/name" = "zfs-exporter";
-          template.metadata.labels."app.kubernetes.io/name" = "zfs-exporter";
-          template.podSpecMacro = {
-            name = "zfs-exporter";
-            mainContainer = {
-              image = "${image.buildArgs.name}:${image.imageTag}";
-              imagePullPolicy = "Never";
-              addCapabilities = [ "SYS_RAWIO" ];
-              portsByName.metrics = 9134;
-              livenessProbe.httpGet.port = "metrics";
-              readinessProbe.httpGet.port = "metrics";
-              volumeMountsByPath."/dev" = "dev";
-            };
-            volumesByName.dev.hostPath = {
-              path = "/dev";
-              type = "Directory";
-            };
+          mainContainer = {
+            image = "${image.buildArgs.name}:${image.imageTag}";
+            imagePullPolicy = "Never";
+            addCapabilities = [ "SYS_RAWIO" ];
+            portsByName.metrics = 9134;
+            livenessProbe.httpGet.port = "metrics";
+            readinessProbe.httpGet.port = "metrics";
+            volumeMountsByPath."/dev" = "dev";
+          };
+          volumesByName.dev.hostPath = {
+            path = "/dev";
+            type = "Directory";
           };
         };
       };

@@ -87,30 +87,22 @@ in
         };
       };
       daemonset = {
-        kind = "DaemonSet";
-        apiVersion = "apps/v1";
-        metadata = {
-          namespace = "smartctl-exporter";
+        apiVersion = "cluster.local";
+        kind = "DaemonSetMacro";
+        metadata.name = "smartctl-exporter";
+        spec.podSpecMacro = {
           name = "smartctl-exporter";
-          labels."app.kubernetes.io/name" = "smartctl-exporter";
-        };
-        spec = {
-          selector.matchLabels."app.kubernetes.io/name" = "smartctl-exporter";
-          template.metadata.labels."app.kubernetes.io/name" = "smartctl-exporter";
-          template.podSpecMacro = {
-            name = "smartctl-exporter";
-            mainContainer = {
-              image = "${image.buildArgs.name}:${image.imageTag}";
-              imagePullPolicy = "Never";
-              args = [ "--smartctl.path=${pkgs.lib.getExe pkgs.smartmontools}" ];
-              addCapabilities = [ "SYS_RAWIO" ];
-              portsByName.metrics = 9633;
-              livenessProbe.httpGet.port = "metrics";
-              readinessProbe.httpGet.port = "metrics";
-              volumeMountsByPath."/dev" = "dev";
-            };
-            volumesByName.dev.hostPath.path = "/dev";
+          mainContainer = {
+            image = "${image.buildArgs.name}:${image.imageTag}";
+            imagePullPolicy = "Never";
+            args = [ "--smartctl.path=${pkgs.lib.getExe pkgs.smartmontools}" ];
+            addCapabilities = [ "SYS_RAWIO" ];
+            portsByName.metrics = 9633;
+            livenessProbe.httpGet.port = "metrics";
+            readinessProbe.httpGet.port = "metrics";
+            volumeMountsByPath."/dev" = "dev";
           };
+          volumesByName.dev.hostPath.path = "/dev";
         };
       };
       service = {

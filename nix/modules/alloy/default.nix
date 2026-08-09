@@ -50,27 +50,15 @@ in
           };
         };
         daemonset = {
-          apiVersion = "apps/v1";
-          kind = "DaemonSet";
-          metadata = {
-            namespace = "alloy";
-            name = "alloy";
-            labels."app.kubernetes.io/name" = "alloy";
-          };
+          apiVersion = "cluster.local";
+          kind = "DaemonSetMacro";
+          metadata.name = "alloy";
           spec = {
             minReadySeconds = 10;
-            selector.matchLabels."app.kubernetes.io/name" = "alloy";
-            template.metadata = {
-              labels = {
-                "app.kubernetes.io/name" = "alloy";
-                "cluster.local/gateway-ingress" = "allow";
-              }
-              // (lib.mergeAttrsList (
-                map (service: { "cluster.local/${service}-egress" = "allow"; }) ([ "apiserver" ] ++ cfg.allowEgress)
-              ));
-              annotations."kubectl.kubernetes.io/default-container" = "alloy";
-            };
-            template.podSpecMacro = {
+            allowIngress = [ "gateway" ];
+            allowEgress = [ "apiserver" ] ++ cfg.allowEgress;
+            template.metadata.annotations."kubectl.kubernetes.io/default-container" = "alloy";
+            podSpecMacro = {
               name = "alloy";
               mainContainer = {
                 image = "docker.io/grafana/alloy:v1.11.3";
