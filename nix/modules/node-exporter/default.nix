@@ -5,16 +5,16 @@
   ...
 }:
 let
-  cfg = config.homelab.workloads.node-exporter;
+  cfg = config.homelab.node-exporter;
   hllib = inputs.homelab-shared.lib;
 in
 {
-  options.homelab.workloads.node-exporter = {
+  options.homelab.node-exporter = {
     enable = lib.mkEnableOption "node-exporter";
   };
   config = lib.mkIf cfg.enable {
     networking.firewall.allowedTCPPorts = lib.optional config.networking.firewall.enable 9100;
-    homelab.workloads.alloy.allowEgress = [ "node-exporter" ];
+    homelab.alloy.allowEgress = [ "node-exporter" ];
     services.k3s.manifests.node-exporter-static.source = ./node-exporter.yaml;
     kubetree.resources.node-exporter-dynamic = {
       namespace = (hllib.k8s.createNamespace { namespace = "node-exporter"; });

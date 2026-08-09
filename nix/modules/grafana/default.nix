@@ -5,10 +5,10 @@
   ...
 }:
 let
-  cfg = config.homelab.workloads.grafana;
+  cfg = config.homelab.grafana;
 in
 {
-  options.homelab.workloads.grafana = {
+  options.homelab.grafana = {
     enable = lib.mkEnableOption "grafana";
     image = lib.mkOption {
       description = "Repo url of the Grafana image to run";
@@ -21,10 +21,10 @@ in
   ]
   ++ self.lib.importsApply [ ./homepage.nix ];
   config = lib.mkIf cfg.enable {
-    homelab.workloads.postgresql.databases.grafana.backup.enable = lib.mkDefault true;
+    homelab.postgresql.databases.grafana.backup.enable = lib.mkDefault true;
     assertions = [
       {
-        assertion = config.homelab.workloads.postgresql.enable;
+        assertion = config.homelab.postgresql.enable;
         message = "Grafana depends on the PostgreSQL service. Enable with `homelab.postgresql.enable=true`";
       }
     ];
@@ -37,7 +37,7 @@ in
         data."grafana.ini" = builtins.readFile ./grafana.ini;
         data."datasources.yaml" = builtins.toJSON {
           apiVersion = 1;
-          datasources = lib.optional config.homelab.workloads.mimir.enable {
+          datasources = lib.optional config.homelab.mimir.enable {
             name = "Mimir";
             uid = "mimir";
             type = "prometheus";
@@ -53,7 +53,7 @@ in
               timeInterval = "30s";
             };
           };
-          deleteDatasources = lib.optional (!config.homelab.workloads.mimir.enable) "mimir";
+          deleteDatasources = lib.optional (!config.homelab.mimir.enable) "mimir";
         };
       };
       service-macro = {

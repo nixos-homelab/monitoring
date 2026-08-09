@@ -6,19 +6,19 @@
 }:
 let
   ccfg = config.homelab.cluster;
-  cfg = config.homelab.workloads.homepage.integrations.grafana;
+  cfg = config.homelab.homepage.integrations.grafana;
 in
 {
-  options.homelab.workloads.homepage.integrations.grafana = {
+  options.homelab.homepage.integrations.grafana = {
     enable = lib.mkOption {
       description = "integration of grafana with homepage";
       type = lib.types.bool;
-      default = config.homelab.workloads.grafana.enable && config.homelab.workloads.homepage.enable;
+      default = config.homelab.grafana.enable && config.homelab.homepage.enable;
     };
   };
   imports = [ inputs.homelab-shared.nixosModules.homepage ];
   config = lib.mkIf cfg.enable {
-    homelab.workloads.homepage = {
+    homelab.homepage = {
       allowEgress = [ "grafana" ];
       services.Monitoring.Grafana = {
         icon = "grafana.png";

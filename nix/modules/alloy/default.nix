@@ -6,11 +6,11 @@
   ...
 }:
 let
-  cfg = config.homelab.workloads.alloy;
+  cfg = config.homelab.alloy;
   hllib = inputs.homelab-shared.lib;
 in
 {
-  options.homelab.workloads.alloy = {
+  options.homelab.alloy = {
     enable = lib.mkEnableOption "alloy";
     allowEgress = lib.mkOption {
       description = "Which services llo should be allowed access to";

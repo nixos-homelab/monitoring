@@ -6,12 +6,12 @@
   ...
 }:
 let
-  cfg = config.homelab.workloads.metrics-server;
+  cfg = config.homelab.metrics-server;
   hllib = inputs.homelab-shared.lib;
   kubelib = inputs.kube-generators.lib { inherit pkgs; };
 in
 {
-  options.homelab.workloads.metrics-server = {
+  options.homelab.metrics-server = {
     enable = lib.mkEnableOption "metrics-server";
   };
   imports = self.lib.importsApply [ ./homepage.nix ];

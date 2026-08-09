@@ -5,10 +5,10 @@
   ...
 }:
 let
-  cfg = config.homelab.workloads.mimir;
+  cfg = config.homelab.mimir;
 in
 {
-  options.homelab.workloads.mimir = {
+  options.homelab.mimir = {
     enable = lib.mkEnableOption "Mimir";
     retention = lib.mkOption {
       description = "How long metrics should be kept";
@@ -18,7 +18,7 @@ in
     };
   };
   config = lib.mkIf cfg.enable {
-    homelab.workloads.alloy.allowEgress = [ "mimir" ];
+    homelab.alloy.allowEgress = [ "mimir" ];
     kubetree.resources.mimir = {
       config = {
         apiVersion = "v1";
