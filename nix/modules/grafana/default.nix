@@ -56,7 +56,7 @@ in
           deleteDatasources = lib.optional (!config.homelab.mimir.enable) "mimir";
         };
       };
-      service-macro = {
+      workload = {
         apiVersion = "cluster.local";
         kind = "WorkloadMacro";
         metadata.name = "grafana";

@@ -63,7 +63,7 @@ in
           };
         };
       };
-      service-macro = {
+      workload = {
         apiVersion = "cluster.local";
         kind = "WorkloadMacro";
         metadata.name = "mimir";
