@@ -6,12 +6,12 @@
   ...
 }:
 let
-  cfg = config.homelab.services.metrics-server;
+  cfg = config.homelab.workloads.metrics-server;
   hllib = inputs.homelab-shared.lib;
   kubelib = inputs.kube-generators.lib { inherit pkgs; };
 in
 {
-  options.homelab.services.metrics-server = {
+  options.homelab.workloads.metrics-server = {
     enable = lib.mkEnableOption "metrics-server";
   };
   imports = self.lib.importsApply [ ./homepage.nix ];
@@ -68,7 +68,7 @@ in
       };
       service = {
         apiVersion = "cluster.local";
-        kind = "ServiceService";
+        kind = "ServiceMacro";
         metadata.namespace = "kube-system";
         metadata.name = "metrics-server";
         spec.portsByName.metrics = {
@@ -78,7 +78,7 @@ in
       };
       netpols = {
         apiVersion = "cluster.local";
-        kind = "ServiceNetpols";
+        kind = "NetpolMacro";
         metadata.namespace = "kube-system";
         metadata.name = "metrics-server";
         spec.ports = [ 10250 ];

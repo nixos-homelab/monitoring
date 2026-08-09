@@ -5,10 +5,10 @@
   ...
 }:
 let
-  cfg = config.homelab.services.grafana;
+  cfg = config.homelab.workloads.grafana;
 in
 {
-  options.homelab.services.grafana = {
+  options.homelab.workloads.grafana = {
     enable = lib.mkEnableOption "grafana";
     image = lib.mkOption {
       description = "Repo url of the Grafana image to run";
@@ -21,10 +21,10 @@ in
   ]
   ++ self.lib.importsApply [ ./homepage.nix ];
   config = lib.mkIf cfg.enable {
-    homelab.services.postgresql.databases.grafana.backup.enable = lib.mkDefault true;
+    homelab.workloads.postgresql.databases.grafana.backup.enable = lib.mkDefault true;
     assertions = [
       {
-        assertion = config.homelab.services.postgresql.enable;
+        assertion = config.homelab.workloads.postgresql.enable;
         message = "Grafana depends on the PostgreSQL service. Enable with `homelab.postgresql.enable=true`";
       }
     ];
@@ -37,7 +37,7 @@ in
         data."grafana.ini" = builtins.readFile ./grafana.ini;
         data."datasources.yaml" = builtins.toJSON {
           apiVersion = 1;
-          datasources = lib.optional config.homelab.services.mimir.enable {
+          datasources = lib.optional config.homelab.workloads.mimir.enable {
             name = "Mimir";
             uid = "mimir";
             type = "prometheus";
@@ -53,12 +53,12 @@ in
               timeInterval = "30s";
             };
           };
-          deleteDatasources = lib.optional (!config.homelab.services.mimir.enable) "mimir";
+          deleteDatasources = lib.optional (!config.homelab.workloads.mimir.enable) "mimir";
         };
       };
       service-macro = {
         apiVersion = "cluster.local";
-        kind = "ServiceMacro";
+        kind = "WorkloadMacro";
         metadata.name = "grafana";
         spec = {
           allowEgress = [
@@ -68,7 +68,7 @@ in
           ];
           allowIngress = [ "gateway" ];
           dataPath = "/var/lib/grafana";
-          servicePodSpec = {
+          podSpecMacro = {
             mainContainer = {
               image = cfg.image;
               portsByName.web = 3000;
@@ -98,7 +98,7 @@ in
       };
       gateway = {
         apiVersion = "cluster.local";
-        kind = "ServiceGateway";
+        kind = "GatewayMacro";
         metadata.name = "grafana";
         spec.port = 3000;
         spec.requestHeaderModifier.add = [

@@ -7,7 +7,7 @@
 }:
 let
   ccfg = config.homelab.cluster;
-  cfg = config.homelab.services.zfs-exporter;
+  cfg = config.homelab.workloads.zfs-exporter;
   hllib = inputs.homelab-shared.lib;
   image = pkgs.dockerTools.buildImage {
     name = "cluster.local/zfs-exporter";
@@ -23,13 +23,13 @@ let
   };
 in
 {
-  options.homelab.services.zfs-exporter = {
+  options.homelab.workloads.zfs-exporter = {
     enable = lib.mkEnableOption "zfs-exporter";
     debug = lib.mkEnableOption "debug mode";
   };
   config = lib.mkIf cfg.enable {
     services.k3s.images = [ image ];
-    homelab.services.alloy.allowEgress = [ "zfs-exporter" ];
+    homelab.workloads.alloy.allowEgress = [ "zfs-exporter" ];
     kubetree.resources.zfs-exporter = {
       namespace = (hllib.k8s.createNamespace { namespace = "zfs-exporter"; });
       service-monitor = {
@@ -84,7 +84,7 @@ in
         spec = {
           selector.matchLabels."app.kubernetes.io/name" = "zfs-exporter";
           template.metadata.labels."app.kubernetes.io/name" = "zfs-exporter";
-          template.servicePodSpec = {
+          template.podSpecMacro = {
             name = "zfs-exporter";
             mainContainer = {
               image = "${image.buildArgs.name}:${image.imageTag}";
@@ -104,13 +104,13 @@ in
       };
       service = {
         apiVersion = "cluster.local";
-        kind = "ServiceService";
+        kind = "ServiceMacro";
         metadata.name = "zfs-exporter";
         spec.portsByName.metrics = 9134;
       };
       netpols = {
         apiVersion = "cluster.local";
-        kind = "ServiceNetpols";
+        kind = "NetpolMacro";
         metadata.name = "zfs-exporter";
         spec.ports = [ 9134 ];
       };

@@ -6,11 +6,11 @@
   ...
 }:
 let
-  cfg = config.homelab.services.alloy;
+  cfg = config.homelab.workloads.alloy;
   hllib = inputs.homelab-shared.lib;
 in
 {
-  options.homelab.services.alloy = {
+  options.homelab.workloads.alloy = {
     enable = lib.mkEnableOption "alloy";
     allowEgress = lib.mkOption {
       description = "Which services llo should be allowed access to";
@@ -70,7 +70,7 @@ in
               ));
               annotations."kubectl.kubernetes.io/default-container" = "alloy";
             };
-            template.servicePodSpec = {
+            template.podSpecMacro = {
               name = "alloy";
               mainContainer = {
                 image = "docker.io/grafana/alloy:v1.11.3";
@@ -109,19 +109,19 @@ in
         };
         service = {
           apiVersion = "cluster.local";
-          kind = "ServiceService";
+          kind = "ServiceMacro";
           metadata.name = "alloy";
           spec.portsByName.web = 3000;
         };
         gateway = {
           apiVersion = "cluster.local";
-          kind = "ServiceGateway";
+          kind = "GatewayMacro";
           metadata.name = "alloy";
           spec.port = 3000;
         };
         netpols = {
           apiVersion = "cluster.local";
-          kind = "ServiceNetpols";
+          kind = "NetpolMacro";
           metadata.name = "alloy";
           spec.ports = [ 3000 ];
         };

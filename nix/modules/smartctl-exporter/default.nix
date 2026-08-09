@@ -7,7 +7,7 @@
 }:
 let
   ccfg = config.homelab.cluster;
-  cfg = config.homelab.services.smartctl-exporter;
+  cfg = config.homelab.workloads.smartctl-exporter;
   hllib = inputs.homelab-shared.lib;
   smartctlExporter = pkgs.buildGo125Module rec {
     name = "smartctl_exporter";
@@ -36,13 +36,13 @@ let
   };
 in
 {
-  options.homelab.services.smartctl-exporter = {
+  options.homelab.workloads.smartctl-exporter = {
     enable = lib.mkEnableOption "smartctl-exporter";
     debug = lib.mkEnableOption "debug mode";
   };
   config = lib.mkIf cfg.enable {
     services.k3s.images = [ image ];
-    homelab.services.alloy.allowEgress = [ "smartctl-exporter" ];
+    homelab.workloads.alloy.allowEgress = [ "smartctl-exporter" ];
     kubetree.resources.smartctl-exporter = {
       namespace = (hllib.k8s.createNamespace { namespace = "smartctl-exporter"; });
       service-monitor = {
@@ -97,7 +97,7 @@ in
         spec = {
           selector.matchLabels."app.kubernetes.io/name" = "smartctl-exporter";
           template.metadata.labels."app.kubernetes.io/name" = "smartctl-exporter";
-          template.servicePodSpec = {
+          template.podSpecMacro = {
             name = "smartctl-exporter";
             mainContainer = {
               image = "${image.buildArgs.name}:${image.imageTag}";
@@ -115,13 +115,13 @@ in
       };
       service = {
         apiVersion = "cluster.local";
-        kind = "ServiceService";
+        kind = "ServiceMacro";
         metadata.name = "smartctl-exporter";
         spec.portsByName.metrics = 9633;
       };
       netpols = {
         apiVersion = "cluster.local";
-        kind = "ServiceNetpols";
+        kind = "NetpolMacro";
         metadata.name = "smartctl-exporter";
         spec.ports = [ 9633 ];
       };

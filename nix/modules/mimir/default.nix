@@ -5,10 +5,10 @@
   ...
 }:
 let
-  cfg = config.homelab.services.mimir;
+  cfg = config.homelab.workloads.mimir;
 in
 {
-  options.homelab.services.mimir = {
+  options.homelab.workloads.mimir = {
     enable = lib.mkEnableOption "Mimir";
     retention = lib.mkOption {
       description = "How long metrics should be kept";
@@ -18,7 +18,7 @@ in
     };
   };
   config = lib.mkIf cfg.enable {
-    homelab.services.alloy.allowEgress = [ "mimir" ];
+    homelab.workloads.alloy.allowEgress = [ "mimir" ];
     kubetree.resources.mimir = {
       config = {
         apiVersion = "v1";
@@ -65,12 +65,12 @@ in
       };
       service-macro = {
         apiVersion = "cluster.local";
-        kind = "ServiceMacro";
+        kind = "WorkloadMacro";
         metadata.name = "mimir";
         spec = {
           ingressPort = 8080;
           dataPath = "/data";
-          servicePodSpec.mainContainer = {
+          podSpecMacro.mainContainer = {
             image = "grafana/mimir:3.0.0";
             args = [ "-config.file=/etc/mimir/mimir.yaml" ];
             portsByName.web = 8080;
@@ -92,7 +92,7 @@ in
               httpGet.port = "web";
             };
           };
-          servicePodSpec.volumesByName.config.configMap.name = "mimir";
+          podSpecMacro.volumesByName.config.configMap.name = "mimir";
         };
       };
     };
