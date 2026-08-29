@@ -59,6 +59,7 @@
           nixosModules = {
             alloy = importApply ./nix/modules/alloy { inherit self inputs; };
             grafana = importApply ./nix/modules/grafana { inherit self inputs; };
+            homepage = importApply ./nix/modules/homepage { inherit self inputs; };
             node-exporter = importApply ./nix/modules/node-exporter { inherit self inputs; };
             metrics-server = importApply ./nix/modules/metrics-server { inherit self inputs; };
             mimir = importApply ./nix/modules/mimir { inherit self inputs; };

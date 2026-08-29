@@ -1,4 +1,4 @@
-{ inputs, ... }:
+{ inputs, self, ... }:
 {
   lib,
   config,
@@ -16,27 +16,34 @@ in
       default = config.homelab.grafana.enable && config.homelab.homepage.enable;
     };
   };
-  imports = [ inputs.homelab-shared.nixosModules.homepage ];
+  imports = [
+    inputs.homelab-shared.nixosModules.homepage
+    self.nixosModules.homepage
+  ];
   config = lib.mkIf cfg.enable {
     homelab.homepage = {
       allowEgress = [ "grafana" ];
+      sections.Monitoring.enable = lib.mkDefault true;
       services.Monitoring.Grafana = {
+        enable = lib.mkDefault true;
         icon = "grafana.png";
         description = "Grafana";
         href = "https://grafana.${ccfg.domain}";
-        widget = {
-          type = "grafana";
-          url = "http://grafana.grafana:3000";
-          version = 2;
-          fields = [
-            "totalalerts"
-            "alertstriggered"
-          ];
-          headers = {
-            X-WEBAUTH-USER = "admin";
-            X-WEBAUTH-ROLE = "Admin";
-          };
-        };
+        widgets = [
+          {
+            type = "grafana";
+            url = "http://grafana.grafana:3000";
+            version = 2;
+            fields = [
+              "totalalerts"
+              "alertstriggered"
+            ];
+            headers = {
+              X-WEBAUTH-USER = "admin";
+              X-WEBAUTH-ROLE = "Admin";
+            };
+          }
+        ];
       };
     };
   };

@@ -19,12 +19,14 @@ in
   config = lib.mkIf cfg.enable {
     homelab.homepage = {
       widgets.resources = {
-        sort = lib.mkDefault 100;
-        backend = "resources";
-        expanded = true;
-        cpu = true;
-        memory = true;
-        network = "default";
+        enable = lib.mkDefault true;
+        settings = {
+          backend = "resources";
+          expanded = true;
+          cpu = true;
+          memory = true;
+          network = "default";
+        };
       };
       allowEgress = [ "metrics-server" ];
     };
