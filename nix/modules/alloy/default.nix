@@ -13,7 +13,7 @@ in
   options.homelab.alloy = {
     enable = lib.mkEnableOption "alloy";
     allowEgress = lib.mkOption {
-      description = "Which services llo should be allowed access to";
+      description = "Which services alloy should be allowed access to";
       type = lib.types.listOf lib.types.str;
     };
   };

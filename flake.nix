@@ -69,20 +69,32 @@
         };
         perSystem =
           { pkgs, lib, ... }:
-          let
-            options-docs = inputs.docs.lib.docs.options {
-              inherit pkgs;
-              modules = lib.attrValues self.nixosModules;
-              repoPath = toString self;
-              repoLinkPrefix = "https://github.com/nixos-homelab/monitoring/blob/main";
-            };
-          in
           {
-            apps.update-docs.program = inputs.docs.lib.docs.updateRepo {
-              inherit pkgs;
-              paths."docs/options.md" = options-docs.optionsCommonMark;
+            packages = {
+              options-docs = inputs.docs.lib.docs.options {
+                inherit pkgs;
+                modules = lib.attrValues self.nixosModules;
+                repoPath = toString self;
+                repoLinkPrefix = "https://github.com/nixos-homelab/monitoring/blob/main";
+                prefixGroups = {
+                  alloy = [ "homelab.alloy" ];
+                  grafana = [
+                    "homelab.grafana"
+                    "homelab.homepage.integrations.grafana"
+                  ];
+                  node-exporter = [ "homelab.node-exporter" ];
+                  metrics-server = [ "homelab.metrics-server" ];
+                  mimir = [ "homelab.mimir" ];
+                  smartctl-exporter = [ "homelab.smartctl-exporter" ];
+                  zfs-exporter = [ "homelab.zfs-exporter" ];
+                  homepage = [ "homelab.homepage.sections" ];
+                };
+              };
+              manual-docs = inputs.docs.lib.mkdocs.manual {
+                inherit pkgs;
+                rootDoc = ./README.md;
+              };
             };
-            packages.options-docs = options-docs.optionsCommonMark;
           };
       }
     );
