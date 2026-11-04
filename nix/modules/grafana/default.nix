@@ -72,6 +72,10 @@ in
             mainContainer = {
               image = cfg.image;
               portsByName.web = 3000;
+              envByName.GF_DATABASE_PASSWORD.valueFrom.secretKeyRef = {
+                name = "postgresql-password";
+                key = "password";
+              };
               livenessProbe.httpGet.port = "web";
               readinessProbe.httpGet.port = "web";
               volumeMountsByPath = {
