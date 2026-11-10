@@ -1,26 +1,24 @@
 { inputs, self, ... }:
 {
   lib,
+  pkgs,
   config,
   ...
 }:
 let
+  images = inputs.homelab-shared.lib.images.pinned pkgs ./Dockerfile;
   cfg = config.homelab.grafana;
 in
 {
   options.homelab.grafana = {
     enable = lib.mkEnableOption "grafana";
-    image = lib.mkOption {
-      description = "Repo url of the Grafana image to run";
-      type = lib.types.str;
-      default = "grafana/grafana:12.2.1";
-    };
   };
   imports = [
     inputs.homelab-shared.nixosModules.postgresql
   ]
   ++ self.lib.importsApply [ ./homepage.nix ];
   config = lib.mkIf cfg.enable {
+    services.k3s.images = builtins.attrValues images;
     homelab.postgresql.databases.grafana.backup.enable = lib.mkDefault true;
     assertions = [
       {
@@ -70,7 +68,8 @@ in
           dataPath = "/var/lib/grafana";
           podSpecMacro = {
             mainContainer = {
-              image = cfg.image;
+              image = images."grafana/grafana".ref;
+              imagePullPolicy = "Never";
               portsByName.web = 3000;
               envByName.GF_DATABASE_PASSWORD.valueFrom.secretKeyRef = {
                 name = "postgresql-password";

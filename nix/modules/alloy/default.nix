@@ -6,6 +6,7 @@
   ...
 }:
 let
+  images = inputs.homelab-shared.lib.images.pinned pkgs ./Dockerfile;
   cfg = config.homelab.alloy;
   hllib = inputs.homelab-shared.lib;
 in
@@ -18,6 +19,7 @@ in
     };
   };
   config = lib.mkIf cfg.enable {
+    services.k3s.images = builtins.attrValues images;
     services.k3s.manifests = {
       alloy-static.source = ./alloy.yaml;
       prometheus-crds.source = pkgs.fetchurl {
@@ -61,7 +63,8 @@ in
             podSpecMacro = {
               name = "alloy";
               mainContainer = {
-                image = "docker.io/grafana/alloy:v1.11.3";
+                image = images."docker.io/grafana/alloy".ref;
+                imagePullPolicy = "Never";
                 args = [
                   "run"
                   "/etc/alloy/alloy-config.alloy"
@@ -83,7 +86,8 @@ in
                 volumeMountsByPath."/data" = "data";
               };
               containersByName.config-reloader = {
-                image = "quay.io/prometheus-operator/prometheus-config-reloader:v0.81.0";
+                image = images."quay.io/prometheus-operator/prometheus-config-reloader".ref;
+                imagePullPolicy = "Never";
                 args = [
                   "--watched-dir=/etc/alloy"
                   "--reload-url=http://localhost:3000/-/reload"

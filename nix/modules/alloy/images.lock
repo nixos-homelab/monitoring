@@ -1,0 +1,4 @@
+{
+  "docker.io/grafana/alloy@sha256:8c7256f412feb9f5f48f9f6f9394dc97ca887f63dea9304f347970ecc1787669": "sha256-4Nmt7jsi2GXIJ8ERE32Ce9FK9VhOQbxUF0I5apVkrzk=",
+  "quay.io/prometheus-operator/prometheus-config-reloader@sha256:959d47672fbff2776a04ec62b8afcec89e8c036af84dc5fade50019dab212746": "sha256-6zYLU+yeP0WdA7LI+bcfUdINOxEF/i+WoZCNljAiG/c="
+}

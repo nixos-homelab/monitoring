@@ -1,10 +1,12 @@
-{ ... }:
+{ inputs, ... }:
 {
   lib,
+  pkgs,
   config,
   ...
 }:
 let
+  images = inputs.homelab-shared.lib.images.pinned pkgs ./Dockerfile;
   cfg = config.homelab.mimir;
 in
 {
@@ -18,6 +20,7 @@ in
     };
   };
   config = lib.mkIf cfg.enable {
+    services.k3s.images = builtins.attrValues images;
     homelab.alloy.allowEgress = [ "mimir" ];
     kubetree.resources.mimir = {
       config = {
@@ -71,7 +74,8 @@ in
           ingressPort = 8080;
           dataPath = "/data";
           podSpecMacro.mainContainer = {
-            image = "grafana/mimir:3.0.0";
+            image = images."grafana/mimir".ref;
+            imagePullPolicy = "Never";
             args = [ "-config.file=/etc/mimir/mimir.yaml" ];
             portsByName.web = 8080;
             volumeMountsByPath."/etc/mimir" = {

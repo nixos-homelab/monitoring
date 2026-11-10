@@ -1,0 +1,1 @@
+FROM grafana/mimir:3.0.0@sha256:dfa02581c519a28e2ce50c7304d05a635bb1e14b36e2f8a7a54815b36d4d1f9b

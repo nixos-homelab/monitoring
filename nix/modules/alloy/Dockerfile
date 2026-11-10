@@ -1,0 +1,2 @@
+FROM docker.io/grafana/alloy:v1.11.3@sha256:8c7256f412feb9f5f48f9f6f9394dc97ca887f63dea9304f347970ecc1787669
+FROM quay.io/prometheus-operator/prometheus-config-reloader:v0.81.0@sha256:959d47672fbff2776a04ec62b8afcec89e8c036af84dc5fade50019dab212746
