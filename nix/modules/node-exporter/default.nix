@@ -2,11 +2,14 @@
 {
   lib,
   config,
+  pkgs,
   ...
 }:
 let
   cfg = config.homelab.node-exporter;
   hllib = inputs.homelab-shared.lib;
+  # The manifest's images, preloaded from images.lock
+  manifest = hllib.images.chart pkgs ./images.lock ./node-exporter.yaml;
 in
 {
   options.homelab.node-exporter = {
@@ -15,7 +18,8 @@ in
   config = lib.mkIf cfg.enable {
     networking.firewall.allowedTCPPorts = lib.optional config.networking.firewall.enable 9100;
     homelab.alloy.allowEgress = [ "node-exporter" ];
-    services.k3s.manifests.node-exporter-static.source = ./node-exporter.yaml;
+    services.k3s.images = manifest.images;
+    services.k3s.manifests.node-exporter-static.source = manifest.manifest;
     kubetree.resources.node-exporter-dynamic = {
       namespace = (hllib.k8s.createNamespace { namespace = "node-exporter"; });
       service = {

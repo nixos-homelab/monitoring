@@ -9,6 +9,26 @@ let
   cfg = config.homelab.metrics-server;
   hllib = inputs.homelab-shared.lib;
   kubelib = inputs.kube-generators.lib { inherit pkgs; };
+  # The release manifest's images, preloaded from images.lock
+  release = hllib.images.chart pkgs ./images.lock (
+    hllib.k8s.patchManifest { inherit pkgs; }
+      (pkgs.fetchurl {
+        url = "https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.8.0/components.yaml";
+        hash = "sha256-/2TRoTuaw7BjXw3ZhYFftEwj7tRwbATl2x2q32vAqDs=";
+      })
+      (
+        kubelib.toYAMLFile {
+          apiVersion = "apps/v1";
+          kind = "Deployment";
+          metadata.name = "metrics-server";
+          metadata.namespace = "kube-system";
+          spec.template.metadata = {
+            name = "metrics-server";
+            labels."cluster.local/apiserver-egress" = "allow";
+          };
+        }
+      )
+  );
 in
 {
   options.homelab.metrics-server = {
@@ -17,24 +37,8 @@ in
   imports = self.lib.importsApply [ ./homepage.nix ];
   config = lib.mkIf cfg.enable {
     services.k3s.disable = [ "metrics-server" ];
-    services.k3s.manifests.metrics-server-release.source =
-      hllib.k8s.patchManifest { inherit pkgs; }
-        (pkgs.fetchurl {
-          url = "https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.8.0/components.yaml";
-          hash = "sha256-/2TRoTuaw7BjXw3ZhYFftEwj7tRwbATl2x2q32vAqDs=";
-        })
-        (
-          kubelib.toYAMLFile {
-            apiVersion = "apps/v1";
-            kind = "Deployment";
-            metadata.name = "metrics-server";
-            metadata.namespace = "kube-system";
-            spec.template.metadata = {
-              name = "metrics-server";
-              labels."cluster.local/apiserver-egress" = "allow";
-            };
-          }
-        );
+    services.k3s.images = release.images;
+    services.k3s.manifests.metrics-server-release.source = release.manifest;
     kubetree.resources.metrics-server-dynamic = {
       netpol = {
         apiVersion = "cilium.io/v2";
