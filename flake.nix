@@ -70,6 +70,23 @@
         perSystem =
           { pkgs, lib, ... }:
           {
+            checks.manifests = inputs.homelab-shared.lib.checks.manifests {
+              inherit pkgs;
+              modules = lib.attrValues self.nixosModules ++ [
+                {
+                  homelab = {
+                    alloy.enable = true;
+                    grafana.enable = true;
+                    metrics-server.enable = true;
+                    mimir.enable = true;
+                    node-exporter.enable = true;
+                    smartctl-exporter.enable = true;
+                    zfs-exporter.enable = true;
+                    homepage.enable = true;
+                  };
+                }
+              ];
+            };
             packages = {
               options-docs = inputs.docs.lib.docs.options {
                 inherit pkgs;
