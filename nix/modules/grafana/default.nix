@@ -75,13 +75,24 @@ in
                 name = "postgresql-password";
                 key = "password";
               };
-              # A first start migrates the database, which can outlast the liveness probe on a busy node
+              # /healthz answers while the web server runs, /api/health only with the database: a postgresql restart
+              # takes grafana out of the Service instead of getting it killed. A first start migrates the database,
+              # which can outlast the liveness probe on a busy node
               startupProbe = {
-                httpGet.port = "web";
+                httpGet = {
+                  path = "/healthz";
+                  port = "web";
+                };
                 failureThreshold = 30;
               };
-              livenessProbe.httpGet.port = "web";
-              readinessProbe.httpGet.port = "web";
+              livenessProbe.httpGet = {
+                path = "/healthz";
+                port = "web";
+              };
+              readinessProbe.httpGet = {
+                path = "/api/health";
+                port = "web";
+              };
               volumeMountsByPath = {
                 "/var/lib/grafana" = "data";
                 "/etc/grafana/grafana.ini" = {
