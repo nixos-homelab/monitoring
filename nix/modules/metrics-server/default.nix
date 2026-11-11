@@ -9,13 +9,20 @@ let
   cfg = config.homelab.metrics-server;
   hllib = inputs.homelab-shared.lib;
   kubelib = inputs.kube-generators.lib { inherit pkgs; };
+  pins = hllib.pins.refs ../../../.github/workflows/pins.yaml;
+  components = hllib.pins.locked ../../../.github/pins.lock "components" pins."kubernetes-sigs/metrics-server" (
+    hash:
+    pkgs.fetchurl {
+      url = "https://github.com/kubernetes-sigs/metrics-server/releases/download/${
+        pins."kubernetes-sigs/metrics-server"
+      }/components.yaml";
+      inherit hash;
+    }
+  );
   # The release manifest's images, preloaded from images.lock
   release = hllib.images.chart pkgs ./images.lock (
     hllib.k8s.patchManifest { inherit pkgs; }
-      (pkgs.fetchurl {
-        url = "https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.8.0/components.yaml";
-        hash = "sha256-/2TRoTuaw7BjXw3ZhYFftEwj7tRwbATl2x2q32vAqDs=";
-      })
+      components.src
       (
         kubelib.toYAMLFile {
           apiVersion = "apps/v1";
@@ -37,6 +44,7 @@ in
   imports = self.lib.importsApply [ ./homepage.nix ];
   config = lib.mkIf cfg.enable {
     homelab.cluster.imageLocks.${toString ./images.lock} = release.refs;
+    homelab.cluster.sourceLocks.${toString ../../../.github/pins.lock}.${components.key} = components.unlocked;
     services.k3s.disable = [ "metrics-server" ];
     services.k3s.images = release.images;
     services.k3s.manifests.metrics-server-release.source = release.manifest;

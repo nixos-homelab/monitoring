@@ -1,0 +1,16 @@
+name: Pins
+
+# Never runs. Dependabot's github-actions ecosystem bumps the refs below
+# (repositories without an action.yml too), which homelab-shared's
+# lib.pins.refs reads: sources that are neither images nor flake inputs, their
+# hashes in ../pins.lock
+on: workflow_dispatch
+
+permissions: {}
+
+jobs:
+  pins:
+    if: false
+    runs-on: ubuntu-latest
+    steps:
+    - uses: kubernetes-sigs/metrics-server@v0.8.0
