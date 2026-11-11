@@ -1,6 +1,6 @@
 {
-  "prom/node-exporter:v1.10.2": {
-    "digest": "sha256:3ac34ce007accad95afed72149e0d2b927b7e42fd1c866149b945b84737c62c3",
-    "hash": "sha256-x/xqVUjOuyJJ5kf1+4F1pH4x1lMpXGpgV4UiAKy8egA="
+  "prom/node-exporter:v1.12.1": {
+    "digest": "sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0",
+    "hash": "sha256-gxbe04JYEALHTexCwmWGmtadNG4ObSZIqYu1Mn4hy9c="
   }
 }
