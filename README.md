@@ -4,7 +4,7 @@ Observability stack on top of [nixos-homelab](https://github.com/nixos-homelab/s
 Grafana, long-term metrics storage, and the exporters/collectors that
 feed it, for both cluster and host-level monitoring.
 
-For the full list of module options, see [docs/options.md](docs/options.md).
+For the full list of module options, see [the options reference](https://nixos-homelab.github.io/monitoring/options/).
 
 ## Setup
 
