@@ -16,6 +16,7 @@ in
     enable = lib.mkEnableOption "node-exporter";
   };
   config = lib.mkIf cfg.enable {
+    homelab.cluster.imageLocks.${toString ./images.lock} = manifest.refs;
     networking.firewall.allowedTCPPorts = lib.optional config.networking.firewall.enable 9100;
     homelab.alloy.allowEgress = [ "node-exporter" ];
     services.k3s.images = manifest.images;

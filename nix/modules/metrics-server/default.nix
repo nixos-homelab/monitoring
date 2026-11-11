@@ -36,6 +36,7 @@ in
   };
   imports = self.lib.importsApply [ ./homepage.nix ];
   config = lib.mkIf cfg.enable {
+    homelab.cluster.imageLocks.${toString ./images.lock} = release.refs;
     services.k3s.disable = [ "metrics-server" ];
     services.k3s.images = release.images;
     services.k3s.manifests.metrics-server-release.source = release.manifest;
