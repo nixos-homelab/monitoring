@@ -75,6 +75,11 @@ in
                 name = "postgresql-password";
                 key = "password";
               };
+              # A first start migrates the database, which can outlast the liveness probe on a busy node
+              startupProbe = {
+                httpGet.port = "web";
+                failureThreshold = 30;
+              };
               livenessProbe.httpGet.port = "web";
               readinessProbe.httpGet.port = "web";
               volumeMountsByPath = {
