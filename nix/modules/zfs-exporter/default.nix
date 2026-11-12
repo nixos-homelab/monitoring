@@ -13,7 +13,8 @@ let
     name = "cluster.local/zfs-exporter";
     copyToRoot = [
       pkgs.prometheus-zfs-exporter
-      pkgs.zfs
+      # Without the python tools (arc_summary and the like), which the exporter doesn't run
+      (pkgs.zfs.override { enablePython = false; })
     ]
     ++ lib.optionals cfg.debug ccfg.debugTools;
     config.User = "0:0";
