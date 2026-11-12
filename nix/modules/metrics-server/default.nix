@@ -31,7 +31,11 @@ let
           metadata.namespace = "kube-system";
           spec.template.metadata = {
             name = "metrics-server";
-            labels."cluster.local/apiserver-egress" = "allow";
+            labels = {
+              "cluster.local/apiserver-egress" = "allow";
+              # What the netpols below select on; the release labels its pods k8s-app only
+              "app.kubernetes.io/name" = "metrics-server";
+            };
           };
         }
       )
