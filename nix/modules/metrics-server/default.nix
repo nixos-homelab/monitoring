@@ -79,16 +79,6 @@ in
           ];
         };
       };
-      service = {
-        apiVersion = "cluster.local";
-        kind = "ServiceMacro";
-        metadata.namespace = "kube-system";
-        metadata.name = "metrics-server";
-        spec.portsByName.metrics = {
-          port = 443;
-          targetPort = 10250;
-        };
-      };
       netpols = {
         apiVersion = "cluster.local";
         kind = "NetpolMacro";
