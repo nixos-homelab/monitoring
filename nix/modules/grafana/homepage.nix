@@ -5,7 +5,6 @@
   ...
 }:
 let
-  ccfg = config.homelab.cluster;
   cfg = config.homelab.homepage.integrations.grafana;
 in
 {
@@ -28,7 +27,7 @@ in
         enable = lib.mkDefault true;
         icon = "grafana.png";
         description = "Grafana";
-        href = "https://grafana.${ccfg.domain}";
+        href = "https://grafana.${config.homelab.workloads.domain}";
         widgets = [
           {
             type = "grafana";

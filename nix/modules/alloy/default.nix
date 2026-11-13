@@ -8,14 +8,14 @@
 let
   images = inputs.homelab-shared.lib.images.pinned pkgs ./Dockerfile;
   cfg = config.homelab.alloy;
-  wm = config.kubetree.workload-macros;
+  workloads = config.homelab.workloads;
   kubelib = inputs.kube-generators.lib { inherit pkgs; };
   prometheusCrds = pkgs.fetchurl {
     url = "https://github.com/prometheus-operator/prometheus-operator/releases/download/v0.86.2/stripped-down-crds.yaml";
     hash = "sha256-fJ1FUzOsXqeDfV8OTt2WZpjkTt15EIuv3YUI8tpQO1s=";
   };
   labels."app.kubernetes.io/name" = "alloy";
-  hostname = "alloy.${wm.domain}";
+  hostname = "alloy.${workloads.domain}";
 in
 {
   options.homelab.alloy = {
@@ -56,10 +56,10 @@ in
           gateways.alloy = {
             metadata = {
               inherit labels;
-              annotations."cert-manager.io/cluster-issuer" = wm.acmeProvider;
+              annotations."cert-manager.io/cluster-issuer" = workloads.acmeProvider;
             };
             spec = {
-              gatewayClassName = wm.gatewayClassName;
+              gatewayClassName = workloads.gatewayClassName;
               listeners = [
                 {
                   inherit hostname;
