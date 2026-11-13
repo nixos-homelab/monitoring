@@ -22,13 +22,37 @@ in
   config = lib.mkIf cfg.enable {
     services.k3s.images = builtins.attrValues images;
     homelab.alloy.allowEgress = [ "mimir" ];
-    kubetree.resources.mimir = {
-      config = {
-        apiVersion = "v1";
-        kind = "ConfigMap";
-        metadata.namespace = "mimir";
-        metadata.name = "mimir";
-        data."mimir.yaml" = builtins.toJSON {
+    homelab.kubernetes.submodules.instances.mimir = {
+      submodule = "workload";
+      args = {
+        ingressPort = 8080;
+        dataPath = "/data";
+        ports.web = 8080;
+        container = {
+          image = images."grafana/mimir".ref;
+          imagePullPolicy = "Never";
+          args = [ "-config.file=/etc/mimir/mimir.yaml" ];
+          volumeMounts."/etc/mimir" = {
+            name = "config";
+            readOnly = true;
+          };
+          startupProbe = {
+            httpGet.path = "/ready";
+            httpGet.port = "web";
+            failureThreshold = 120;
+          };
+          livenessProbe = {
+            httpGet.path = "/ready";
+            httpGet.port = "web";
+          };
+          readinessProbe = {
+            httpGet.path = "/ready";
+            httpGet.port = "web";
+          };
+        };
+      };
+      config.kubernetes.resources = {
+        configMaps.mimir.data."mimir.yaml" = builtins.toJSON {
           multitenancy_enabled = false;
           target = lib.concatStringsSep "," [
             "distributor"
@@ -65,39 +89,7 @@ in
             local.directory = "/data/rules";
           };
         };
-      };
-      workload = {
-        apiVersion = "cluster.local";
-        kind = "WorkloadMacro";
-        metadata.name = "mimir";
-        spec = {
-          ingressPort = 8080;
-          dataPath = "/data";
-          podSpecMacro.mainContainer = {
-            image = images."grafana/mimir".ref;
-            imagePullPolicy = "Never";
-            args = [ "-config.file=/etc/mimir/mimir.yaml" ];
-            portsByName.web = 8080;
-            volumeMountsByPath."/etc/mimir" = {
-              name = "config";
-              readOnly = true;
-            };
-            startupProbe = {
-              httpGet.path = "/ready";
-              httpGet.port = "web";
-              failureThreshold = 120;
-            };
-            livenessProbe = {
-              httpGet.path = "/ready";
-              httpGet.port = "web";
-            };
-            readinessProbe = {
-              httpGet.path = "/ready";
-              httpGet.port = "web";
-            };
-          };
-          podSpecMacro.volumesByName.config.configMap.name = "mimir";
-        };
+        deployments.mimir.spec.template.spec.volumes.config.configMap.name = "mimir";
       };
     };
   };

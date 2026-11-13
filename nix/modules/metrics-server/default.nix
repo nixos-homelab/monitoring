@@ -52,43 +52,91 @@ in
     services.k3s.disable = [ "metrics-server" ];
     services.k3s.images = release.images;
     services.k3s.manifests.metrics-server-release.source = release.manifest;
-    kubetree.resources.metrics-server-dynamic = {
-      netpol = {
-        apiVersion = "cilium.io/v2";
-        kind = "CiliumNetworkPolicy";
-        metadata = {
-          namespace = "kube-system";
-          name = "metrics-server-to-node";
-          labels."app.kubernetes.io/name" = "metrics-server";
-        };
-        spec = {
-          endpointSelector.matchLabels."app.kubernetes.io/name" = "metrics-server";
-          ingress = [
-            {
-              toPortsFlattened = [ 10250 ];
-              fromEntities = [
-                "host"
-                "remote-node"
-              ];
-            }
-          ];
-          egress = [
-            {
-              toPortsFlattened = [ 10250 ];
-              toEntities = [
-                "host"
-                "remote-node"
-              ];
-            }
-          ];
-        };
-      };
-      netpols = {
-        apiVersion = "cluster.local";
-        kind = "NetpolMacro";
-        metadata.namespace = "kube-system";
-        metadata.name = "metrics-server";
-        spec.ports = [ 10250 ];
+    # Next to the release: who metrics-server may reach and who may reach it
+    homelab.kubernetes.submodules.instances.metrics-server-dynamic = {
+      submodule = "manifest";
+      config = {
+        kubernetes.namespace = "kube-system";
+        kubernetes.resources =
+          let
+            labels."app.kubernetes.io/name" = "metrics-server";
+            toPorts = [ { ports = [ { port = "10250"; } ]; } ];
+          in
+          {
+            ciliumNetworkPolicies.metrics-server-to-node = {
+              metadata = { inherit labels; };
+              spec = {
+                endpointSelector.matchLabels = labels;
+                ingress = [
+                  {
+                    inherit toPorts;
+                    fromEntities = [
+                      "host"
+                      "remote-node"
+                    ];
+                  }
+                ];
+                egress = [
+                  {
+                    inherit toPorts;
+                    toEntities = [
+                      "host"
+                      "remote-node"
+                    ];
+                  }
+                ];
+              };
+            };
+            # The pair of policies a pod-running submodule gets from `policyPorts`, by hand: pods labeled
+            # `cluster.local/metrics-server-egress: allow` may reach 10250
+            ciliumClusterwideNetworkPolicies.pod-to-metrics-server = {
+              metadata = {
+                inherit labels;
+                namespace = null;
+              };
+              spec = {
+                endpointSelector.matchLabels."cluster.local/metrics-server-egress" = "allow";
+                egress = [
+                  {
+                    toEndpoints = [
+                      {
+                        matchLabels = labels // {
+                          "k8s:io.kubernetes.pod.namespace" = "kube-system";
+                        };
+                      }
+                    ];
+                    toPorts = [ { ports = [ { port = "10250"; } ]; } ];
+                  }
+                ];
+              };
+            };
+            ciliumNetworkPolicies.metrics-server-from-pod = {
+              metadata = { inherit labels; };
+              spec = {
+                endpointSelector.matchLabels = labels;
+                ingress = [
+                  {
+                    fromEndpoints = [
+                      {
+                        matchExpressions = [
+                          {
+                            key = "k8s:io.kubernetes.pod.namespace";
+                            operator = "Exists";
+                          }
+                          {
+                            key = "cluster.local/metrics-server-egress";
+                            operator = "In";
+                            values = [ "allow" ];
+                          }
+                        ];
+                      }
+                    ];
+                    toPorts = [ { ports = [ { port = "10250"; } ]; } ];
+                  }
+                ];
+              };
+            };
+          };
       };
     };
   };

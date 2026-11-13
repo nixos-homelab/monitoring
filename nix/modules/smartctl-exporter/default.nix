@@ -8,7 +8,6 @@
 let
   ccfg = config.homelab.cluster;
   cfg = config.homelab.smartctl-exporter;
-  hllib = inputs.homelab-shared.lib;
   smartctlExporter = pkgs.buildGo125Module rec {
     name = "smartctl_exporter";
     version = "0.14.0-1";
@@ -43,79 +42,73 @@ in
   config = lib.mkIf cfg.enable {
     services.k3s.images = [ image ];
     homelab.alloy.allowEgress = [ "smartctl-exporter" ];
-    kubetree.resources.smartctl-exporter = {
-      namespace = (hllib.k8s.createNamespace { namespace = "smartctl-exporter"; });
-      service-monitor = {
-        apiVersion = "monitoring.coreos.com/v1";
-        kind = "ServiceMonitor";
-        metadata = {
-          namespace = "smartctl-exporter";
-          name = "smartctl-exporter";
-          labels."app.kubernetes.io/name" = "smartctl-exporter";
-        };
-        spec = {
-          selector.matchLabels."app.kubernetes.io/name" = "smartctl-exporter";
-          endpoints = [
-            {
-              port = "metrics";
-              metricRelabelings = [
+    homelab.kubernetes.submodules.instances.smartctl-exporter = {
+      submodule = "manifest";
+      config = {
+        kubernetes.resources = {
+          # Cluster-scoped: no namespace, which kubenix gives every object by default
+          namespaces.smartctl-exporter.metadata.namespace = null;
+          serviceMonitors.smartctl-exporter = {
+            metadata.labels."app.kubernetes.io/name" = "smartctl-exporter";
+            spec = {
+              selector.matchLabels."app.kubernetes.io/name" = "smartctl-exporter";
+              endpoints = [
                 {
-                  sourceLabels = [ "namespace" ];
-                  targetLabel = "exporter_namespace";
-                }
-                {
-                  sourceLabels = [ "pod" ];
-                  targetLabel = "exporter_pod";
-                }
-                {
-                  sourceLabels = [ "container" ];
-                  targetLabel = "exporter_container";
-                }
-                {
-                  sourceLabels = [ "instance" ];
-                  targetLabel = "instance";
-                  action = "replace";
-                  regex = "^(.*):9633$";
-                }
-                {
-                  regex = "^(namespace|pod|container)$";
-                  action = "labeldrop";
+                  port = "metrics";
+                  metricRelabelings = [
+                    {
+                      sourceLabels = [ "namespace" ];
+                      targetLabel = "exporter_namespace";
+                    }
+                    {
+                      sourceLabels = [ "pod" ];
+                      targetLabel = "exporter_pod";
+                    }
+                    {
+                      sourceLabels = [ "container" ];
+                      targetLabel = "exporter_container";
+                    }
+                    {
+                      sourceLabels = [ "instance" ];
+                      targetLabel = "instance";
+                      action = "replace";
+                      regex = "^(.*):9633$";
+                    }
+                    {
+                      regex = "^(namespace|pod|container)$";
+                      action = "labeldrop";
+                    }
+                  ];
                 }
               ];
-            }
-          ];
-        };
-      };
-      daemonset = {
-        apiVersion = "cluster.local";
-        kind = "DaemonSetMacro";
-        metadata.name = "smartctl-exporter";
-        spec.podSpecMacro = {
-          name = "smartctl-exporter";
-          mainContainer = {
-            image = "${image.buildArgs.name}:${image.imageTag}";
-            imagePullPolicy = "Never";
-            args = [ "--smartctl.path=${pkgs.lib.getExe pkgs.smartmontools}" ];
-            addCapabilities = [ "SYS_RAWIO" ];
-            portsByName.metrics = 9633;
-            livenessProbe.httpGet.port = "metrics";
-            readinessProbe.httpGet.port = "metrics";
-            volumeMountsByPath."/dev" = "dev";
+            };
           };
-          volumesByName.dev.hostPath.path = "/dev";
         };
-      };
-      service = {
-        apiVersion = "cluster.local";
-        kind = "ServiceMacro";
-        metadata.name = "smartctl-exporter";
-        spec.portsByName.metrics = 9633;
-      };
-      netpols = {
-        apiVersion = "cluster.local";
-        kind = "NetpolMacro";
-        metadata.name = "smartctl-exporter";
-        spec.ports = [ 9633 ];
+        submodules.instances = {
+          smartctl-exporter = {
+            submodule = "daemonset";
+            args = {
+              ports.metrics = 9633;
+              container = {
+                image = "${image.buildArgs.name}:${image.imageTag}";
+                imagePullPolicy = "Never";
+                args = [ "--smartctl.path=${pkgs.lib.getExe pkgs.smartmontools}" ];
+                securityContext.capabilities.add = [ "SYS_RAWIO" ];
+                livenessProbe.httpGet.port = "metrics";
+                readinessProbe.httpGet.port = "metrics";
+                volumeMounts."/dev".name = "dev";
+              };
+            };
+            config.kubernetes.resources.daemonSets.smartctl-exporter.spec.template.spec.volumes.dev.hostPath.path =
+              "/dev";
+          };
+          # A key apart from the DaemonSet instance, the same object name
+          smartctl-exporter-service = {
+            name = "smartctl-exporter";
+            submodule = "service";
+            args.ports.metrics = 9633;
+          };
+        };
       };
     };
   };

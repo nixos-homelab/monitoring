@@ -26,108 +26,115 @@ in
         message = "Grafana depends on the PostgreSQL service. Enable with `homelab.postgresql.enable=true`";
       }
     ];
-    kubetree.resources.grafana = {
-      config = {
-        apiVersion = "v1";
-        kind = "ConfigMap";
-        metadata.namespace = "grafana";
-        metadata.name = "grafana";
-        data."grafana.ini" = builtins.readFile ./grafana.ini;
-        data."datasources.yaml" = builtins.toJSON {
-          apiVersion = 1;
-          datasources = lib.optional config.homelab.mimir.enable {
-            name = "Mimir";
-            uid = "mimir";
-            type = "prometheus";
-            isDefault = false;
-            access = "proxy";
-            typeLogoUrl = "/public/app/plugins/datasource/prometheus/img/mimir_logo.svg";
-            url = "http://mimir.mimir:8080/prometheus";
-            jsonData = {
-              httpMethod = "POST";
-              prometheusType = "Mimir";
-              prometheusVersion = "2.16.0";
-              queryTimeout = "120s";
-              timeInterval = "30s";
-            };
+    homelab.kubernetes.submodules.instances.grafana = {
+      submodule = "workload";
+      args = {
+        allowEgress = [
+          "internet"
+          "mimir"
+          "postgresql"
+        ];
+        dataPath = "/var/lib/grafana";
+        ingressPort = 3000;
+        ports.web = 3000;
+        container = {
+          image = images."grafana/grafana".ref;
+          imagePullPolicy = "Never";
+          env.GF_DATABASE_PASSWORD.valueFrom.secretKeyRef = {
+            name = "postgresql-password";
+            key = "password";
           };
-          deleteDatasources = lib.optional (!config.homelab.mimir.enable) "mimir";
-        };
-      };
-      workload = {
-        apiVersion = "cluster.local";
-        kind = "WorkloadMacro";
-        metadata.name = "grafana";
-        spec = {
-          allowEgress = [
-            "internet"
-            "mimir"
-            "postgresql"
-          ];
-          allowIngress = [ "gateway" ];
-          dataPath = "/var/lib/grafana";
-          podSpecMacro = {
-            mainContainer = {
-              image = images."grafana/grafana".ref;
-              imagePullPolicy = "Never";
-              portsByName.web = 3000;
-              envByName.GF_DATABASE_PASSWORD.valueFrom.secretKeyRef = {
-                name = "postgresql-password";
-                key = "password";
-              };
-              # /healthz answers while the web server runs, /api/health only with the database: a postgresql restart
-              # takes grafana out of the Service instead of getting it killed. A first start migrates the database,
-              # which can outlast the liveness probe on a busy node
-              startupProbe = {
-                httpGet = {
-                  path = "/healthz";
-                  port = "web";
-                };
-                failureThreshold = 30;
-              };
-              livenessProbe.httpGet = {
-                path = "/healthz";
-                port = "web";
-              };
-              readinessProbe.httpGet = {
-                path = "/api/health";
-                port = "web";
-              };
-              volumeMountsByPath = {
-                "/var/lib/grafana" = "data";
-                "/etc/grafana/grafana.ini" = {
-                  name = "config";
-                  subPath = "grafana.ini";
-                  readOnly = true;
-                };
-                "/etc/grafana/provisioning/datasources/all.yaml" = {
-                  name = "config";
-                  subPath = "datasources.yaml";
-                  readOnly = true;
-                };
-                "/tmp" = "tmp";
-              };
+          # /healthz answers while the web server runs, /api/health only with the database: a postgresql restart
+          # takes grafana out of the Service instead of getting it killed. A first start migrates the database,
+          # which can outlast the liveness probe on a busy node
+          startupProbe = {
+            httpGet = {
+              path = "/healthz";
+              port = "web";
             };
-            volumesByName = {
-              config.configMap.name = "grafana";
-              tmp.emptyDir = { };
+            failureThreshold = 30;
+          };
+          livenessProbe.httpGet = {
+            path = "/healthz";
+            port = "web";
+          };
+          readinessProbe.httpGet = {
+            path = "/api/health";
+            port = "web";
+          };
+          volumeMounts = {
+            "/etc/grafana/grafana.ini" = {
+              name = "config";
+              subPath = "grafana.ini";
+              readOnly = true;
             };
+            "/etc/grafana/provisioning/datasources/all.yaml" = {
+              name = "config";
+              subPath = "datasources.yaml";
+              readOnly = true;
+            };
+            "/tmp".name = "tmp";
           };
         };
       };
-      gateway = {
-        apiVersion = "cluster.local";
-        kind = "GatewayMacro";
-        metadata.name = "grafana";
-        spec.port = 3000;
-        spec.requestHeaderModifier.add = [
+      config.kubernetes.resources = {
+        configMaps.grafana.data = {
+          "grafana.ini" = builtins.readFile ./grafana.ini;
+          "datasources.yaml" = builtins.toJSON {
+            apiVersion = 1;
+            datasources = lib.optional config.homelab.mimir.enable {
+              name = "Mimir";
+              uid = "mimir";
+              type = "prometheus";
+              isDefault = false;
+              access = "proxy";
+              typeLogoUrl = "/public/app/plugins/datasource/prometheus/img/mimir_logo.svg";
+              url = "http://mimir.mimir:8080/prometheus";
+              jsonData = {
+                httpMethod = "POST";
+                prometheusType = "Mimir";
+                prometheusVersion = "2.16.0";
+                queryTimeout = "120s";
+                timeInterval = "30s";
+              };
+            };
+            deleteDatasources = lib.optional (!config.homelab.mimir.enable) "mimir";
+          };
+        };
+        deployments.grafana.spec.template.spec.volumes = {
+          config.configMap.name = "grafana";
+          tmp.emptyDir = { };
+        };
+        # The catch-all rule of the workload, adding the headers of the admin login grafana trusts
+        hTTPRoutes.grafana.spec.rules = lib.mkForce [
           {
-            name = "X-WEBAUTH-USER";
-            value = "admin";
-          }
-          {
-            name = "X-WEBAUTH-ROLE";
-            value = "Admin";
+            matches = [
+              {
+                path.type = "PathPrefix";
+                path.value = "/";
+              }
+            ];
+            backendRefs = [
+              {
+                name = "grafana";
+                port = 3000;
+              }
+            ];
+            filters = [
+              {
+                type = "RequestHeaderModifier";
+                requestHeaderModifier.add = [
+                  {
+                    name = "X-WEBAUTH-USER";
+                    value = "admin";
+                  }
+                  {
+                    name = "X-WEBAUTH-ROLE";
+                    value = "Admin";
+                  }
+                ];
+              }
+            ];
           }
         ];
       };
