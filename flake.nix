@@ -5,11 +5,6 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
     flake-parts.url = "github:hercules-ci/flake-parts";
     kube-generators.url = "github:farcaller/nix-kube-generators";
-    kubetree = {
-      url = "github:andsens/nix-kubetree";
-      inputs.nixpkgs.follows = "nixpkgs";
-      inputs.flake-parts.follows = "flake-parts";
-    };
     setup-secrets = {
       url = "github:andsens/nixos-setup-secrets";
       inputs.systems.follows = "systems";
@@ -22,7 +17,6 @@
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.flake-parts.follows = "flake-parts";
       inputs.setup-secrets.follows = "setup-secrets";
-      inputs.kubetree.follows = "kubetree";
       inputs.kube-generators.follows = "kube-generators";
     };
     docs = {
