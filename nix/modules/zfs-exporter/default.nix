@@ -28,7 +28,7 @@ in
     debug = lib.mkEnableOption "debug mode";
   };
   config = lib.mkIf cfg.enable {
-    services.k3s.images = [ image ];
+    homelab.cluster.images = [ image ];
     homelab.alloy.allowEgress = [ "zfs-exporter" ];
     homelab.kubernetes.submodules.instances.zfs-exporter = {
       submodule = "manifest";

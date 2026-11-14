@@ -19,8 +19,8 @@ in
     homelab.cluster.imageLocks.${toString ./images.lock} = manifest.refs;
     networking.firewall.allowedTCPPorts = lib.optional config.networking.firewall.enable 9100;
     homelab.alloy.allowEgress = [ "node-exporter" ];
-    services.k3s.images = manifest.images;
-    services.k3s.manifests.node-exporter-static.source = manifest.manifest;
+    homelab.cluster.images = manifest.images;
+    homelab.cluster.manifests.node-exporter-static.source = manifest.manifest;
     # Next to the DaemonSet of node-exporter-static: its Service and who may reach it
     homelab.kubernetes.submodules.instances.node-exporter-dynamic = {
       submodule = "manifest";

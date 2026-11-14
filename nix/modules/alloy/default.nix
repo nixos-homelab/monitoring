@@ -26,8 +26,8 @@ in
     };
   };
   config = lib.mkIf cfg.enable {
-    services.k3s.images = builtins.attrValues images;
-    services.k3s.manifests = {
+    homelab.cluster.images = builtins.attrValues images;
+    homelab.cluster.manifests = {
       alloy-static.source = ./alloy.yaml;
       prometheus-crds.source = prometheusCrds;
     };

@@ -18,7 +18,7 @@ in
   ]
   ++ self.lib.importsApply [ ./homepage.nix ];
   config = lib.mkIf cfg.enable {
-    services.k3s.images = builtins.attrValues images;
+    homelab.cluster.images = builtins.attrValues images;
     homelab.postgresql.databases.grafana.backup.enable = lib.mkDefault true;
     assertions = [
       {

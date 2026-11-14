@@ -20,7 +20,7 @@ in
     };
   };
   config = lib.mkIf cfg.enable {
-    services.k3s.images = builtins.attrValues images;
+    homelab.cluster.images = builtins.attrValues images;
     homelab.alloy.allowEgress = [ "mimir" ];
     homelab.kubernetes.submodules.instances.mimir = {
       submodule = "workload";

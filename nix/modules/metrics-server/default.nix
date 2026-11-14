@@ -50,9 +50,9 @@ in
   config = lib.mkIf cfg.enable {
     homelab.cluster.imageLocks.${toString ./images.lock} = release.refs;
     homelab.cluster.sourceLocks.${toString ../../../.github/pins.lock}.${components.key} = components.unlocked;
-    services.k3s.disable = [ "metrics-server" ];
-    services.k3s.images = release.images;
-    services.k3s.manifests.metrics-server-release.source = release.manifest;
+    homelab.cluster.providedComponents = [ "metrics-server" ];
+    homelab.cluster.images = release.images;
+    homelab.cluster.manifests.metrics-server-release.source = release.manifest;
     # Next to the release: who metrics-server may reach and who may reach it
     homelab.kubernetes.submodules.instances.metrics-server-dynamic = {
       submodule = "manifest";
