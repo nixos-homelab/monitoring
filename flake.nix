@@ -29,16 +29,6 @@
       inputs.homelab-shared.follows = "homelab-shared";
       inputs.docs.follows = "docs";
     };
-    homelab-networking = {
-      url = "github:nixos-homelab/networking";
-      inputs.systems.follows = "systems";
-      inputs.nixpkgs.follows = "nixpkgs";
-      inputs.flake-parts.follows = "flake-parts";
-      inputs.setup-secrets.follows = "setup-secrets";
-      inputs.kube-generators.follows = "kube-generators";
-      inputs.homelab-shared.follows = "homelab-shared";
-      inputs.docs.follows = "docs";
-    };
     docs = {
       url = "github:andsens/nix-docs";
       inputs.systems.follows = "systems";
@@ -75,7 +65,6 @@
             grafana = importApply ./nix/modules/grafana { inherit self inputs; };
             homepage = importApply ./nix/modules/homepage { inherit self inputs; };
             node-exporter = importApply ./nix/modules/node-exporter { inherit self inputs; };
-            metrics-server = importApply ./nix/modules/metrics-server { inherit self inputs; };
             mimir = importApply ./nix/modules/mimir { inherit self inputs; };
             smartctl-exporter = importApply ./nix/modules/smartctl-exporter { inherit self inputs; };
             zfs-exporter = importApply ./nix/modules/zfs-exporter { inherit self inputs; };
@@ -96,7 +85,6 @@
                   homelab = {
                     alloy.enable = true;
                     grafana.enable = true;
-                    metrics-server.enable = true;
                     mimir.enable = true;
                     node-exporter.enable = true;
                     smartctl-exporter.enable = true;
@@ -119,7 +107,6 @@
                     "homelab.homepage.integrations.grafana"
                   ];
                   node-exporter = [ "homelab.node-exporter" ];
-                  metrics-server = [ "homelab.metrics-server" ];
                   mimir = [ "homelab.mimir" ];
                   smartctl-exporter = [ "homelab.smartctl-exporter" ];
                   zfs-exporter = [ "homelab.zfs-exporter" ];

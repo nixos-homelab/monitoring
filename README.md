@@ -45,5 +45,3 @@ For the full list of module options, see [the options reference](https://nixos-h
 - **node-exporter**: host-level metrics (CPU, memory, disk, network).
 - **smartctl-exporter**: disk S.M.A.R.T. health metrics.
 - **zfs-exporter**: ZFS pool metrics.
-- **metrics-server**: standard Kubernetes `metrics-server`, for
-  `kubectl top` and autoscaling.
