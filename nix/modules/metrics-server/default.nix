@@ -45,7 +45,8 @@ in
   options.homelab.metrics-server = {
     enable = lib.mkEnableOption "metrics-server";
   };
-  imports = self.lib.importsApply [ ./homepage.nix ];
+  # The Cilium types, for metrics-server-to-node
+  imports = self.lib.importsApply [ ./homepage.nix ] ++ [ inputs.homelab-networking.nixosModules.cilium-crds ];
   config = lib.mkIf cfg.enable {
     homelab.cluster.imageLocks.${toString ./images.lock} = release.refs;
     homelab.cluster.sourceLocks.${toString ../../../.github/pins.lock}.${components.key} = components.unlocked;
@@ -57,6 +58,11 @@ in
       submodule = "manifest";
       config = {
         kubernetes.namespace = "kube-system";
+        # The pods of the release: pods labeled `cluster.local/metrics-server-egress: allow` may reach 10250
+        submodules.instances.metrics-server = {
+          submodule = "pods";
+          args.ports.https = 10250;
+        };
         kubernetes.resources =
           let
             labels."app.kubernetes.io/name" = "metrics-server";
@@ -83,55 +89,6 @@ in
                       "host"
                       "remote-node"
                     ];
-                  }
-                ];
-              };
-            };
-            # The pair of policies a pod-running submodule gets from `policyPorts`, by hand: pods labeled
-            # `cluster.local/metrics-server-egress: allow` may reach 10250
-            ciliumClusterwideNetworkPolicies.pod-to-metrics-server = {
-              metadata = {
-                inherit labels;
-                namespace = null;
-              };
-              spec = {
-                endpointSelector.matchLabels."cluster.local/metrics-server-egress" = "allow";
-                egress = [
-                  {
-                    toEndpoints = [
-                      {
-                        matchLabels = labels // {
-                          "k8s:io.kubernetes.pod.namespace" = "kube-system";
-                        };
-                      }
-                    ];
-                    toPorts = [ { ports = [ { port = "10250"; } ]; } ];
-                  }
-                ];
-              };
-            };
-            ciliumNetworkPolicies.metrics-server-from-pod = {
-              metadata = { inherit labels; };
-              spec = {
-                endpointSelector.matchLabels = labels;
-                ingress = [
-                  {
-                    fromEndpoints = [
-                      {
-                        matchExpressions = [
-                          {
-                            key = "k8s:io.kubernetes.pod.namespace";
-                            operator = "Exists";
-                          }
-                          {
-                            key = "cluster.local/metrics-server-egress";
-                            operator = "In";
-                            values = [ "allow" ];
-                          }
-                        ];
-                      }
-                    ];
-                    toPorts = [ { ports = [ { port = "10250"; } ]; } ];
                   }
                 ];
               };

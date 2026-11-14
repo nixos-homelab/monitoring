@@ -26,63 +26,14 @@ in
       submodule = "manifest";
       config = {
         kubernetes.namespace = "node-exporter";
-        kubernetes.resources =
-          let
-            labels."app.kubernetes.io/name" = "node-exporter";
-          in
-          {
-            # Cluster-scoped: no namespace, which kubenix gives every object by default
-            namespaces.node-exporter.metadata.namespace = null;
-            # The pair of policies a pod-running submodule gets from `policyPorts`, by hand: pods labeled
-            # `cluster.local/node-exporter-egress: allow` may reach 9100
-            ciliumClusterwideNetworkPolicies.pod-to-node-exporter = {
-              metadata = {
-                inherit labels;
-                namespace = null;
-              };
-              spec = {
-                endpointSelector.matchLabels."cluster.local/node-exporter-egress" = "allow";
-                egress = [
-                  {
-                    toEndpoints = [
-                      {
-                        matchLabels = labels // {
-                          "k8s:io.kubernetes.pod.namespace" = "node-exporter";
-                        };
-                      }
-                    ];
-                    toPorts = [ { ports = [ { port = "9100"; } ]; } ];
-                  }
-                ];
-              };
-            };
-            ciliumNetworkPolicies.node-exporter-from-pod = {
-              metadata = { inherit labels; };
-              spec = {
-                endpointSelector.matchLabels = labels;
-                ingress = [
-                  {
-                    fromEndpoints = [
-                      {
-                        matchExpressions = [
-                          {
-                            key = "k8s:io.kubernetes.pod.namespace";
-                            operator = "Exists";
-                          }
-                          {
-                            key = "cluster.local/node-exporter-egress";
-                            operator = "In";
-                            values = [ "allow" ];
-                          }
-                        ];
-                      }
-                    ];
-                    toPorts = [ { ports = [ { port = "9100"; } ]; } ];
-                  }
-                ];
-              };
-            };
-          };
+        # Cluster-scoped: no namespace, which kubenix gives every object by default
+        kubernetes.resources.namespaces.node-exporter.metadata.namespace = null;
+        # The pods of the DaemonSet: pods labeled `cluster.local/node-exporter-egress: allow` may reach 9100
+        submodules.instances.node-exporter-pods = {
+          name = "node-exporter";
+          submodule = "pods";
+          args.ports.metrics = 9100;
+        };
         submodules.instances.node-exporter = {
           submodule = "service";
           args.ports.metrics = 9100;
