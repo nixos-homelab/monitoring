@@ -14,7 +14,7 @@ in
     enable = lib.mkEnableOption "grafana";
   };
   imports = [
-    inputs.homelab-shared.nixosModules.postgresql
+    inputs.homelab-storage.nixosModules.postgresql
   ]
   ++ self.lib.importsApply [ ./homepage.nix ];
   config = lib.mkIf cfg.enable {
