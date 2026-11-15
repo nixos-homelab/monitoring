@@ -17,7 +17,7 @@ let
   labels."app.kubernetes.io/name" = "alloy";
   hostname = "alloy.${workloads.domain}";
   monitor =
-    { name, ... }:
+    { name, config, ... }:
     {
       options = {
         namespace = lib.mkOption {
@@ -47,11 +47,27 @@ let
           type = lib.types.bool;
           default = false;
         };
+        podPort = lib.mkOption {
+          description = ''
+            The metrics port of the pods behind the Service, as the container has it. Set, the monitor brings a policy
+            of its own, `<name>-metrics`, that lets Alloy reach the pods on this port alone, and `egress` defaults to
+            it: Alloy reaches no other port of the workload. Null for targets whose policies are made elsewhere (host
+            network, a static policy).
+          '';
+          type = lib.types.nullOr lib.types.port;
+          default = null;
+        };
+        podSelector = lib.mkOption {
+          description = "Labels of the pods `podPort` is on, in `namespace`.";
+          type = lib.types.attrsOf lib.types.str;
+          default = config.selector;
+          defaultText = lib.literalExpression "selector";
+        };
         egress = lib.mkOption {
           description = "The policy name whose `cluster.local/<egress>-egress: allow` label lets Alloy reach the target, null for none.";
           type = lib.types.nullOr lib.types.str;
-          default = name;
-          defaultText = lib.literalExpression "name";
+          default = if config.podPort != null then "${name}-metrics" else name;
+          defaultText = lib.literalExpression ''if podPort != null then "''${name}-metrics" else name'';
         };
         endpoint = lib.mkOption {
           description = "More of the ServiceMonitor endpoint (scheme, tlsConfig, interval, authorization, ...), merged over what the other options make.";
@@ -81,206 +97,232 @@ in
       default = { };
     };
   };
-  config = lib.mkIf cfg.enable {
-    homelab.alloy.allowEgress = lib.filter (e: e != null) (lib.mapAttrsToList (_: m: m.egress) cfg.monitors);
-    # Its own metrics on the web port. A pod reaching its own address never leaves its network namespace; the egress
-    # label is for the Alloy pods of other nodes
-    homelab.alloy.monitors.alloy.port = "web";
-    homelab.cluster.images = builtins.attrValues images;
-    homelab.cluster.manifests = {
-      alloy-static.source = ./alloy.yaml;
-      prometheus-crds.source = prometheusCrds;
-    };
-    # ServiceMonitor and the other prometheus-operator kinds, typed from the CRDs installed above
-    homelab.kubernetes.kubernetes.customTypes = lib.concatMap inputs.homelab-shared.lib.crd2types.customTypes (
-      kubelib.fromYAML (builtins.readFile prometheusCrds)
-    );
-    homelab.kubernetes.submodules.instances.alloy-dynamic = {
-      submodule = "manifest";
-      config = {
-        kubernetes.namespace = "alloy";
-        kubernetes.resources = {
-          # Cluster-scoped: no namespace, which kubenix gives every object by default
-          namespaces.alloy.metadata.namespace = null;
-          configMaps.alloy = {
-            metadata = { inherit labels; };
-            data."alloy-config.alloy" = builtins.readFile ./alloy-config.alloy;
-          };
-          # In Alloy's namespace, each selecting its Services' namespace: they exist only while Alloy does
-          serviceMonitors = lib.mapAttrs (_: m: {
-            metadata = { inherit labels; };
-            spec = {
-              namespaceSelector.matchNames = [ m.namespace ];
-              selector.matchLabels = m.selector;
-              endpoints = [
-                (lib.recursiveUpdate (
-                  {
-                    inherit (m) port;
-                    relabelings = [
+  config = lib.mkIf cfg.enable (
+    lib.mkMerge [
+      {
+        homelab.alloy.allowEgress = lib.filter (e: e != null) (
+          lib.mapAttrsToList (_: m: m.egress) cfg.monitors
+        );
+        # Its own metrics on the web port. A pod reaching its own address never leaves its network namespace; the egress
+        # label is for the Alloy pods of other nodes
+        homelab.alloy.monitors.alloy.port = "web";
+        homelab.cluster.images = builtins.attrValues images;
+        homelab.cluster.manifests = {
+          alloy-static.source = ./alloy.yaml;
+          prometheus-crds.source = prometheusCrds;
+        };
+        # ServiceMonitor and the other prometheus-operator kinds, typed from the CRDs installed above
+        homelab.kubernetes.kubernetes.customTypes = lib.concatMap inputs.homelab-shared.lib.crd2types.customTypes (
+          kubelib.fromYAML (builtins.readFile prometheusCrds)
+        );
+        homelab.kubernetes.submodules.instances.alloy-dynamic = {
+          submodule = "manifest";
+          config = {
+            kubernetes.namespace = "alloy";
+            kubernetes.resources = {
+              # Cluster-scoped: no namespace, which kubenix gives every object by default
+              namespaces.alloy.metadata.namespace = null;
+              configMaps.alloy = {
+                metadata = { inherit labels; };
+                data."alloy-config.alloy" = builtins.readFile ./alloy-config.alloy;
+              };
+              # In Alloy's namespace, each selecting its Services' namespace: they exist only while Alloy does
+              serviceMonitors = lib.mapAttrs (_: m: {
+                metadata = { inherit labels; };
+                spec = {
+                  namespaceSelector.matchNames = [ m.namespace ];
+                  selector.matchLabels = m.selector;
+                  endpoints = [
+                    (lib.recursiveUpdate (
                       {
-                        sourceLabels = [ "__meta_kubernetes_pod_node_name" ];
-                        targetLabel = "node";
+                        inherit (m) port;
+                        relabelings = [
+                          {
+                            sourceLabels = [ "__meta_kubernetes_pod_node_name" ];
+                            targetLabel = "node";
+                          }
+                        ]
+                        ++ lib.optional m.perNode {
+                          sourceLabels = [ "__meta_kubernetes_pod_node_name" ];
+                          targetLabel = "instance";
+                        };
                       }
-                    ]
-                    ++ lib.optional m.perNode {
-                      sourceLabels = [ "__meta_kubernetes_pod_node_name" ];
-                      targetLabel = "instance";
-                    };
-                  }
-                  // lib.optionalAttrs (m.path != null) { inherit (m) path; }
-                ) m.endpoint)
-              ];
-            };
-          }) cfg.monitors;
-          persistentVolumeClaims.alloy.spec = {
-            accessModes = [ "ReadWriteOnce" ];
-            resources.requests.storage = "1Gi";
-            volumeMode = "Filesystem";
-          };
-          # No submodule writes a Gateway next to a DaemonSet: the Gateway and HTTPRoutes of the workload submodule,
-          # written out
-          gateways.alloy = {
-            metadata = {
-              inherit labels;
-              annotations."cert-manager.io/cluster-issuer" = workloads.acmeProvider;
-            };
-            spec = {
-              gatewayClassName = workloads.gatewayClassName;
-              listeners = [
-                {
-                  inherit hostname;
-                  name = "alloy-cleartext-redirect";
-                  port = 80;
-                  protocol = "HTTP";
-                }
-                {
-                  inherit hostname;
-                  name = "alloy";
-                  port = 443;
-                  protocol = "HTTPS";
-                  tls.mode = "Terminate";
-                  tls.certificateRefs = [ { name = "alloy-tls"; } ];
-                }
-              ];
-            };
-          };
-          hTTPRoutes = {
-            alloy = {
-              metadata = { inherit labels; };
-              spec = {
-                parentRefs = [
-                  {
-                    name = "alloy";
-                    port = 443;
-                  }
-                ];
-                hostnames = [ hostname ];
-                rules = [
-                  {
-                    matches = [
-                      {
-                        path.type = "PathPrefix";
-                        path.value = "/";
-                      }
-                    ];
-                    backendRefs = [
+                      // lib.optionalAttrs (m.path != null) { inherit (m) path; }
+                    ) m.endpoint)
+                  ];
+                };
+              }) cfg.monitors;
+              persistentVolumeClaims.alloy.spec = {
+                accessModes = [ "ReadWriteOnce" ];
+                resources.requests.storage = "1Gi";
+                volumeMode = "Filesystem";
+              };
+              # No submodule writes a Gateway next to a DaemonSet: the Gateway and HTTPRoutes of the workload submodule,
+              # written out
+              gateways.alloy = {
+                metadata = {
+                  inherit labels;
+                  annotations."cert-manager.io/cluster-issuer" = workloads.acmeProvider;
+                };
+                spec = {
+                  gatewayClassName = workloads.gatewayClassName;
+                  listeners = [
+                    {
+                      inherit hostname;
+                      name = "alloy-cleartext-redirect";
+                      port = 80;
+                      protocol = "HTTP";
+                    }
+                    {
+                      inherit hostname;
+                      name = "alloy";
+                      port = 443;
+                      protocol = "HTTPS";
+                      tls.mode = "Terminate";
+                      tls.certificateRefs = [ { name = "alloy-tls"; } ];
+                    }
+                  ];
+                };
+              };
+              hTTPRoutes = {
+                alloy = {
+                  metadata = { inherit labels; };
+                  spec = {
+                    parentRefs = [
                       {
                         name = "alloy";
-                        port = 3000;
+                        port = 443;
                       }
                     ];
-                  }
-                ];
-              };
-            };
-            alloy-cleartext-redirect = {
-              metadata = { inherit labels; };
-              spec = {
-                parentRefs = [
-                  {
-                    name = "alloy";
-                    port = 80;
-                  }
-                ];
-                hostnames = [ hostname ];
-                rules = [
-                  {
-                    filters = [
+                    hostnames = [ hostname ];
+                    rules = [
                       {
-                        type = "RequestRedirect";
-                        requestRedirect.scheme = "https";
-                        requestRedirect.statusCode = 301;
+                        matches = [
+                          {
+                            path.type = "PathPrefix";
+                            path.value = "/";
+                          }
+                        ];
+                        backendRefs = [
+                          {
+                            name = "alloy";
+                            port = 3000;
+                          }
+                        ];
                       }
                     ];
-                  }
-                ];
-              };
-            };
-          };
-        };
-        submodules.instances = {
-          alloy = {
-            submodule = "daemonset";
-            args = {
-              allowIngress = [ "gateway" ];
-              # kubelet: its node's kubelet, port 10250, scraped in alloy-config.alloy
-              allowEgress = [
-                "apiserver"
-                "kubelet"
-              ]
-              ++ cfg.allowEgress;
-              ports.web = 3000;
-              container = {
-                image = images."docker.io/grafana/alloy".ref;
-                imagePullPolicy = "Never";
-                args = [
-                  "run"
-                  "/etc/alloy/alloy-config.alloy"
-                  "--storage.path=/data"
-                  "--server.http.listen-addr=0.0.0.0:3000"
-                ];
-                env.HOSTNAME.valueFrom.fieldRef.fieldPath = "spec.nodeName";
-                readinessProbe = {
-                  httpGet = {
-                    path = "/-/ready";
-                    port = "web";
-                    scheme = "HTTP";
                   };
-                  initialDelaySeconds = 10;
-                  timeoutSeconds = 1;
                 };
-                volumeMounts."/etc/alloy".name = "config";
-                volumeMounts."/data".name = "data";
+                alloy-cleartext-redirect = {
+                  metadata = { inherit labels; };
+                  spec = {
+                    parentRefs = [
+                      {
+                        name = "alloy";
+                        port = 80;
+                      }
+                    ];
+                    hostnames = [ hostname ];
+                    rules = [
+                      {
+                        filters = [
+                          {
+                            type = "RequestRedirect";
+                            requestRedirect.scheme = "https";
+                            requestRedirect.statusCode = 301;
+                          }
+                        ];
+                      }
+                    ];
+                  };
+                };
               };
             };
-            config.kubernetes.resources.daemonSets.alloy.spec = {
-              minReadySeconds = 10;
-              template.metadata.annotations."kubectl.kubernetes.io/default-container" = "alloy";
-              template.spec = {
-                # The ServiceAccount of alloy-static.yaml, which its ClusterRole is bound to
-                serviceAccountName = "alloy";
-                containers.config-reloader = {
-                  image = images."quay.io/prometheus-operator/prometheus-config-reloader".ref;
-                  imagePullPolicy = "Never";
-                  args = [
-                    "--watched-dir=/etc/alloy"
-                    "--reload-url=http://localhost:3000/-/reload"
-                  ];
-                  volumeMounts."/etc/alloy".name = "config";
+            submodules.instances = {
+              alloy = {
+                submodule = "daemonset";
+                args = {
+                  allowIngress = [ "gateway" ];
+                  # kubelet: its node's kubelet, port 10250, scraped in alloy-config.alloy
+                  allowEgress = [
+                    "apiserver"
+                    "kubelet"
+                  ]
+                  ++ cfg.allowEgress;
+                  ports.web = 3000;
+                  container = {
+                    image = images."docker.io/grafana/alloy".ref;
+                    imagePullPolicy = "Never";
+                    args = [
+                      "run"
+                      "/etc/alloy/alloy-config.alloy"
+                      "--storage.path=/data"
+                      "--server.http.listen-addr=0.0.0.0:3000"
+                    ];
+                    env.HOSTNAME.valueFrom.fieldRef.fieldPath = "spec.nodeName";
+                    readinessProbe = {
+                      httpGet = {
+                        path = "/-/ready";
+                        port = "web";
+                        scheme = "HTTP";
+                      };
+                      initialDelaySeconds = 10;
+                      timeoutSeconds = 1;
+                    };
+                    volumeMounts."/etc/alloy".name = "config";
+                    volumeMounts."/data".name = "data";
+                  };
                 };
-                volumes.config.configMap.name = "alloy";
-                volumes.data.persistentVolumeClaim.claimName = "alloy";
+                config.kubernetes.resources.daemonSets.alloy.spec = {
+                  minReadySeconds = 10;
+                  template.metadata.annotations."kubectl.kubernetes.io/default-container" = "alloy";
+                  template.spec = {
+                    # The ServiceAccount of alloy-static.yaml, which its ClusterRole is bound to
+                    serviceAccountName = "alloy";
+                    containers.config-reloader = {
+                      image = images."quay.io/prometheus-operator/prometheus-config-reloader".ref;
+                      imagePullPolicy = "Never";
+                      args = [
+                        "--watched-dir=/etc/alloy"
+                        "--reload-url=http://localhost:3000/-/reload"
+                      ];
+                      volumeMounts."/etc/alloy".name = "config";
+                    };
+                    volumes.config.configMap.name = "alloy";
+                    volumes.data.persistentVolumeClaim.claimName = "alloy";
+                  };
+                };
+              };
+              # A key apart from the DaemonSet instance, the same object name
+              alloy-service = {
+                name = "alloy";
+                submodule = "service";
+                args.ports.web = 3000;
               };
             };
-          };
-          # A key apart from the DaemonSet instance, the same object name
-          alloy-service = {
-            name = "alloy";
-            submodule = "service";
-            args.ports.web = 3000;
           };
         };
-      };
-    };
-  };
+      }
+      {
+        # A policy per monitor with a podPort: Alloy reaches that port of the pods and nothing else of the workload
+        homelab.kubernetes.submodules.instances = lib.mapAttrs' (
+          name: m:
+          lib.nameValuePair "${name}-metrics-policy" {
+            submodule = "manifest";
+            config = {
+              kubernetes.namespace = m.namespace;
+              submodules.instances.metrics = {
+                name = "${name}-metrics";
+                submodule = "pods";
+                args = {
+                  selector = m.podSelector;
+                  ports.metrics = m.podPort;
+                };
+              };
+            };
+          }
+        ) (lib.filterAttrs (_: m: m.podPort != null) cfg.monitors);
+      }
+    ]
+  );
 }

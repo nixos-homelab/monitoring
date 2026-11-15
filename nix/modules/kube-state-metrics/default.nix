@@ -9,7 +9,7 @@ let
   cfg = config.homelab.kube-state-metrics;
   image = pkgs.dockerTools.buildImage {
     name = "cluster.local/kube-state-metrics";
-    config.Entrypoint = [ (lib.getExe pkgs.kube-state-metrics) ];
+    config.Entrypoint = [ (lib.getExe' pkgs.kube-state-metrics "kube-state-metrics") ];
   };
   # The resources it reports by API group: its defaults (2.17.0) without secrets, so it reads no Secret
   resources = {
