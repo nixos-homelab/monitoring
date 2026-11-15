@@ -21,6 +21,8 @@ let
     if builtins.isPath d.dashboard then builtins.readFile d.dashboard else builtins.toJSON d.dashboard;
 in
 {
+  # Modules that add dashboards import this one
+  key = "${toString __curPos.file}#modules.nixos.grafana";
   options.homelab.grafana = {
     enable = lib.mkEnableOption "grafana";
     apiServerAccess = lib.mkEnableOption ''
@@ -81,6 +83,7 @@ in
     inputs.homelab-storage.nixosModules.postgresql
   ]
   ++ self.lib.importsApply [
+    ./drilldown.nix
     ./homepage.nix
     ./metrics.nix
   ];
