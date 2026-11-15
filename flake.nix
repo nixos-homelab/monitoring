@@ -70,6 +70,7 @@
             node-exporter = importApply ./nix/modules/node-exporter { inherit self inputs; };
             mimir = importApply ./nix/modules/mimir { inherit self inputs; };
             smartctl-exporter = importApply ./nix/modules/smartctl-exporter { inherit self inputs; };
+            systemd-exporter = importApply ./nix/modules/systemd-exporter { inherit self inputs; };
             zfs-exporter = importApply ./nix/modules/zfs-exporter { inherit self inputs; };
           };
         };
@@ -86,6 +87,7 @@
                     mimir.enable = true;
                     node-exporter.enable = true;
                     smartctl-exporter.enable = true;
+                    systemd-exporter.enable = true;
                     zfs-exporter.enable = true;
                     homepage.enable = true;
                     kube-state-metrics.enable = true;
@@ -129,6 +131,7 @@
                   node-exporter = [ "homelab.node-exporter" ];
                   mimir = [ "homelab.mimir" ];
                   smartctl-exporter = [ "homelab.smartctl-exporter" ];
+                  systemd-exporter = [ "homelab.systemd-exporter" ];
                   zfs-exporter = [ "homelab.zfs-exporter" ];
                   homepage = [ "homelab.homepage.sections" ];
                 };
