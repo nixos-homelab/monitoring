@@ -29,12 +29,13 @@ in
         g.autoGrid { columns = 4; } [
           (g.stat {
             title = "Ready";
+            description = "Pods ready, of those running or starting: a finished Job's pods don't count";
             queries = [
               (g.prom ''sum(kube_pod_status_ready{${w}, condition="true"}) or vector(0)'' {
                 instant = true;
                 legend = "ready";
               })
-              (g.prom "count(kube_pod_info{${w}}) or vector(0)" {
+              (g.prom ''sum(kube_pod_status_phase{${w}, phase=~"Running|Pending"}) or vector(0)'' {
                 instant = true;
                 legend = "pods";
               })

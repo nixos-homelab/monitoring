@@ -129,7 +129,7 @@ in
               unit = "percentunit";
               min = 0;
               max = 1;
-              description = "Persistent volume claims the kubelet reports usage for; NFS volumes have none";
+              description = "The filesystem of each persistent volume claim the kubelet reports; claims on one dataset share its numbers. NFS volumes have none";
               queries = [
                 (g.prom "kubelet_volume_stats_used_bytes{${w}} / kubelet_volume_stats_capacity_bytes{${w}}" {
                   instant = true;
