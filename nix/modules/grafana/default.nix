@@ -12,6 +12,11 @@ in
 {
   options.homelab.grafana = {
     enable = lib.mkEnableOption "grafana";
+    apiServerAccess = lib.mkEnableOption ''
+      the API server's service proxy reaching Grafana's web port. Grafana trusts the login headers of whatever
+      reaches it, and the proxy forwards a client's headers, so whoever may `get` `services/proxy` on grafana can
+      read Grafana as any user. Meant for short-lived checks
+    '';
   };
   imports = [
     inputs.homelab-storage.nixosModules.postgresql
@@ -40,6 +45,7 @@ in
         dataPath = "/var/lib/grafana";
         ingressPort = 3000;
         ports.web = 3000;
+        apiServerPorts = lib.optional cfg.apiServerAccess "web";
         container = {
           image = images."grafana/grafana".ref;
           imagePullPolicy = "Never";
