@@ -86,6 +86,7 @@ in
     ./cluster.nix
     ./drilldown.nix
     ./overviews.nix
+    ./services.nix
     ./homepage.nix
     ./metrics.nix
   ];

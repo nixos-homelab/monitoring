@@ -23,6 +23,57 @@ in
     '';
   };
   config = lib.mkIf config.homelab.kube-state-metrics.grafana.enable {
+    homelab.grafana.overviews.services = {
+      title = "Services";
+      rows.workloads = {
+        order = 100;
+        row = g.row { title = "Workloads"; } (
+          g.autoGrid { columns = 1; } [
+            (g.stat {
+              title = "Available";
+              description = "Each namespace's Deployments, DaemonSets and StatefulSets: the share of their pods that are available";
+              unit = "percentunit";
+              queries = [
+                (g.prom
+                  ''
+                    min by (namespace) (
+                      kube_deployment_status_replicas_available / (kube_deployment_spec_replicas > 0)
+                      or kube_daemonset_status_number_available / (kube_daemonset_status_desired_number_scheduled > 0)
+                      or kube_statefulset_status_replicas_available / (kube_statefulset_replicas > 0)
+                    )
+                  ''
+                  {
+                    instant = true;
+                    legend = "{{namespace}}";
+                  }
+                )
+              ];
+              thresholds = [
+                {
+                  value = null;
+                  color = "red";
+                }
+                {
+                  value = 0.99;
+                  color = "green";
+                }
+              ];
+              options = {
+                colorMode = "background";
+                textMode = "value_and_name";
+                justifyMode = "center";
+              };
+              fieldLinks = [
+                {
+                  title = "Workload";
+                  url = "/d/workload/workload?var-workload=\${__field.labels.namespace}&\${__url_time_range}";
+                }
+              ];
+            })
+          ]
+        );
+      };
+    };
     homelab.grafana.overviews.cluster = {
       title = "Cluster";
       rows.workloads = {

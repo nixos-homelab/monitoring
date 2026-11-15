@@ -120,6 +120,8 @@ let
       options ? { },
       # [ { title; url; } ]: links in the panel's header
       links ? [ ],
+      # [ { title; url; } ]: links on each value, which can use ${__field.labels.<label>}
+      fieldLinks ? null,
       # QueryOptionsSpec: interval, maxDataPoints, timeFrom, ...
       queryOptions ? { },
       transparent ? null,
@@ -164,6 +166,7 @@ let
                     noValue
                     custom
                     ;
+                  links = fieldLinks;
                   thresholds =
                     if thresholds == null then
                       null
