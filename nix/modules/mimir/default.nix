@@ -28,6 +28,8 @@ in
         ingressPort = 8080;
         dataPath = "/data";
         ports.web = 8080;
+        # The API server's service proxy, for the query API (GET only to the group viewers)
+        apiServerPorts = [ "web" ];
         container = {
           image = images."grafana/mimir".ref;
           imagePullPolicy = "Never";
