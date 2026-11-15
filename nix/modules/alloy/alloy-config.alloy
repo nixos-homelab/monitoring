@@ -5,8 +5,13 @@ logging {
 discovery.kubernetes "pods" {
   role = "pod"
 }
+// The node this Alloy runs on (HOSTNAME is spec.nodeName): one Alloy per node, each scraping its own kubelet
 discovery.kubernetes "nodes" {
   role = "node"
+  selectors {
+    role  = "node"
+    field = "metadata.name=" + sys.env("HOSTNAME")
+  }
 }
 discovery.kubernetes "services" {
   role = "service"
@@ -27,4 +32,41 @@ prometheus.remote_write "mimir" {
   endpoint {
     url = "http://mimir.mimir:8080/api/v1/push"
   }
+}
+// The kubelet and its cAdvisor, at the node's address and kubelet port, which the node role makes the target. Labels
+// as in kube-prometheus: job "kubelet" for both, told apart by metrics_path; instance is the node name, as the node
+// role sets it, and node too. cAdvisor's own namespace, pod and container labels stay as they are
+discovery.relabel "kubelet" {
+  targets = discovery.kubernetes.nodes.targets
+  rule {
+    source_labels = ["__meta_kubernetes_node_name"]
+    target_label  = "node"
+  }
+  rule {
+    target_label = "metrics_path"
+    replacement  = "/metrics"
+  }
+}
+discovery.relabel "cadvisor" {
+  targets = discovery.relabel.kubelet.output
+  rule {
+    target_label = "__metrics_path__"
+    replacement  = "/metrics/cadvisor"
+  }
+  rule {
+    target_label = "metrics_path"
+    replacement  = "/metrics/cadvisor"
+  }
+}
+// The kubelet authenticates the ServiceAccount token and authorizes both paths as nodes/metrics. Its serving
+// certificate is k3s's server CA's, the CA of the token's ca.crt, for the node's name and addresses
+prometheus.scrape "kubelet" {
+  targets           = array.concat(discovery.relabel.kubelet.output, discovery.relabel.cadvisor.output)
+  job_name          = "kubelet"
+  scheme            = "https"
+  bearer_token_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+  tls_config {
+    ca_file = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+  }
+  forward_to = [prometheus.remote_write.mimir.receiver]
 }

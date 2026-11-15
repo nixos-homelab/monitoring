@@ -7,9 +7,10 @@ metadata:
   labels:
     app.kubernetes.io/name: alloy
 ---
-# What alloy-config.alloy reads: its discovery.kubernetes components, and the ServiceMonitors with the Services,
-# endpoints and pods they select. A monitor whose endpoint takes a credential from a Secret or ConfigMap needs get on
-# those as well
+# What alloy-config.alloy reads: its discovery.kubernetes components, the ServiceMonitors with the Services, endpoints
+# and pods they select, and the kubelet's metrics (nodes/metrics: its /metrics and /metrics/*, not the rest of the
+# kubelet API that nodes/proxy opens, exec included). A monitor whose endpoint takes a credential from a Secret or
+# ConfigMap needs get on those as well
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -29,6 +30,9 @@ rules:
 - apiGroups: [monitoring.coreos.com]
   resources: [servicemonitors]
   verbs: [get, list, watch]
+- apiGroups: [""]
+  resources: [nodes/metrics]
+  verbs: [get]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

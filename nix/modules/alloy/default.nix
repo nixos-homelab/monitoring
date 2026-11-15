@@ -223,7 +223,12 @@ in
             submodule = "daemonset";
             args = {
               allowIngress = [ "gateway" ];
-              allowEgress = [ "apiserver" ] ++ cfg.allowEgress;
+              # kubelet: its node's kubelet, port 10250, scraped in alloy-config.alloy
+              allowEgress = [
+                "apiserver"
+                "kubelet"
+              ]
+              ++ cfg.allowEgress;
               ports.web = 3000;
               container = {
                 image = images."docker.io/grafana/alloy".ref;
