@@ -21,6 +21,84 @@ in
     '';
   };
   config = lib.mkIf config.homelab.node-exporter.grafana.enable {
+    homelab.grafana.home.tiles = {
+      cpu = {
+        group = "NAS";
+        order = 100;
+        panel = g.gauge {
+          title = "CPU busy";
+          unit = "percentunit";
+          min = 0;
+          max = 1;
+          links = [
+            {
+              title = "NAS health";
+              url = "/d/nas/nas?\${__url_time_range}";
+            }
+          ];
+          queries = [
+            (g.prom ''1 - avg(rate(node_cpu_seconds_total{mode="idle"}[$__rate_interval]))'' {
+              instant = true;
+            })
+          ];
+        };
+      };
+      memory = {
+        group = "NAS";
+        order = 101;
+        panel = g.gauge {
+          title = "Memory used";
+          description = "Without the page cache and the ZFS ARC";
+          unit = "percentunit";
+          min = 0;
+          max = 1;
+          links = [
+            {
+              title = "NAS health";
+              url = "/d/nas/nas?\${__url_time_range}";
+            }
+          ];
+          queries = [
+            (g.prom
+              "1 - (sum(node_memory_MemAvailable_bytes) + (sum(node_zfs_arc_size) or vector(0))) / sum(node_memory_MemTotal_bytes)"
+              {
+                instant = true;
+              }
+            )
+          ];
+        };
+      };
+      temperature = {
+        group = "NAS";
+        order = 102;
+        panel = g.stat {
+          title = "Hottest sensor";
+          unit = "celsius";
+          links = [
+            {
+              title = "NAS health";
+              url = "/d/nas/nas?\${__url_time_range}";
+            }
+          ];
+          queries = [ (g.prom "max(node_hwmon_temp_celsius)" { instant = true; }) ];
+        };
+      };
+      uptime = {
+        group = "NAS";
+        order = 103;
+        panel = g.stat {
+          title = "Up for";
+          unit = "s";
+          links = [
+            {
+              title = "NAS health";
+              url = "/d/nas/nas?\${__url_time_range}";
+            }
+          ];
+          queries = [ (g.prom "min(time() - node_boot_time_seconds)" { instant = true; }) ];
+        };
+      };
+    };
     homelab.grafana.overviews.nas = {
       title = "NAS health";
       description = "The host: CPU, memory, temperatures, pools, disks, network, NFS";

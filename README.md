@@ -39,7 +39,8 @@ For the full list of module options, see [the documentation](https://nixos-homel
 
 - **grafana**: dashboards, provisioned with datasources for Mimir.
   `homelab.grafana.dashboards.<name>` provisions a dashboard (read-only in
-  the UI), and `homelab.grafana.homeDashboard` makes one Grafana's home.
+  the UI), and `homelab.grafana.homeDashboard` makes one Grafana's home. The modules' tiles
+  (`homelab.grafana.home.tiles`) make a Home dashboard, which is the home by default.
 - **mimir**: long-term Prometheus-compatible metrics storage.
 - **alloy**: the [Grafana Alloy](https://grafana.com/docs/alloy/) agent
   that scrapes and forwards metrics/logs, with a per-service

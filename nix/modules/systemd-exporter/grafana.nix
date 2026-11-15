@@ -23,6 +23,26 @@ in
     '';
   };
   config = lib.mkIf config.homelab.systemd-exporter.grafana.enable {
+    homelab.grafana.home.tiles.units = {
+      group = "NAS";
+      order = 120;
+      panel = g.stat {
+        title = "Host units";
+        decimals = 0;
+        links = [
+          {
+            title = "NAS health";
+            url = "/d/nas/nas?\${__url_time_range}";
+          }
+        ];
+        queries = [
+          (g.prom "sum by (state) (systemd_unit_state)" {
+            instant = true;
+            legend = "{{state}}";
+          })
+        ];
+      };
+    };
     homelab.grafana.overviews.nas = {
       title = "NAS health";
       variables.node = g.nodeVariable;

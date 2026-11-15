@@ -96,6 +96,51 @@ in
     '';
   };
   config = lib.mkIf config.homelab.kube-state-metrics.grafana.enable {
+    homelab.grafana.home.tiles = {
+      available = {
+        group = "Workloads";
+        order = 200;
+        panel = g.stat {
+          title = "Workloads available";
+          description = "Each namespace's share of available pods; a value opens its workload";
+          unit = "percentunit";
+          queries = [
+            (g.prom
+              "min by (namespace) (kube_deployment_status_replicas_available / (kube_deployment_spec_replicas > 0) or kube_daemonset_status_number_available / (kube_daemonset_status_desired_number_scheduled > 0) or kube_statefulset_status_replicas_available / (kube_statefulset_replicas > 0))"
+              {
+                instant = true;
+                legend = "{{namespace}}";
+              }
+            )
+          ];
+          options = {
+            textMode = "value_and_name";
+            justifyMode = "center";
+          };
+          fieldLinks = toWorkload;
+        };
+      };
+      pods = {
+        group = "Workloads";
+        order = 201;
+        panel = g.stat {
+          title = "Pods by phase";
+          decimals = 0;
+          links = [
+            {
+              title = "Cluster";
+              url = "/d/cluster/cluster?\${__url_time_range}";
+            }
+          ];
+          queries = [
+            (g.prom "sum by (phase) (kube_pod_status_phase)" {
+              instant = true;
+              legend = "{{phase}}";
+            })
+          ];
+        };
+      };
+    };
     homelab.grafana.overviews.services = {
       title = "Services";
       rows.workloads = {

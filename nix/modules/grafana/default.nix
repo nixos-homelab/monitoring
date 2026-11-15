@@ -85,6 +85,7 @@ in
   ++ self.lib.importsApply [
     ./cluster.nix
     ./drilldown.nix
+    ./home.nix
     ./overviews.nix
     ./services.nix
     ./homepage.nix
