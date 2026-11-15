@@ -389,6 +389,40 @@ in
       };
     };
 
+  # The host picked on host dashboards, `node="$node"` in the queries: every node with a host exporter
+  nodeVariable = {
+    kind = "QueryVariable";
+    spec = {
+      name = "node";
+      label = "Node";
+      multi = false;
+      includeAll = false;
+      sort = "alphabeticalAsc";
+      refresh = "onTimeRangeChanged";
+      hide = "dontHide";
+      current = {
+        text = "";
+        value = "";
+      };
+      skipUrlSync = false;
+      regex = "";
+      options = [ ];
+      allowCustomValue = false;
+      definition = "label_values(node_uname_info, node)";
+      query = {
+        kind = "DataQuery";
+        group = "prometheus";
+        version = "v0";
+        datasource.name = mimirUid;
+        spec = {
+          query = "label_values(node_uname_info, node)";
+          qryType = 1;
+          refId = "PrometheusVariableQueryEditor-VariableQuery";
+        };
+      };
+    };
+  };
+
   # A link in the dashboard's header to the dashboards with any of `tags`, or with `url` to anywhere.
   # `includeVars` carries the current variables along
   link =

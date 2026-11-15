@@ -12,7 +12,7 @@ let
   manifest = hllib.images.chart pkgs ./images.lock ./node-exporter.yaml;
 in
 {
-  imports = [ self.nixosModules.alloy ];
+  imports = [ self.nixosModules.alloy ] ++ self.lib.importsApply [ ./grafana.nix ];
   options.homelab.node-exporter = {
     enable = lib.mkEnableOption "node-exporter";
   };

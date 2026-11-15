@@ -84,6 +84,7 @@ in
   ]
   ++ self.lib.importsApply [
     ./drilldown.nix
+    ./overviews.nix
     ./homepage.nix
     ./metrics.nix
   ];
