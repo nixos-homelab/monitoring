@@ -1,4 +1,4 @@
-# The systemd exporter's row of the NAS health dashboard: the host's failed units
+# The systemd exporter's row of the NAS health dashboard: the host's units by state, and its timers
 { self, ... }:
 {
   lib,
@@ -31,39 +31,45 @@ in
         row = g.row { title = "Host units"; } (
           g.autoGrid { columns = 3; } [
             (g.stat {
-              title = "Failed units";
+              title = "Units by state";
               decimals = 0;
               queries = [
-                (g.prom ''count(systemd_unit_state{${n}, state="failed"} == 1) or vector(0)'' { instant = true; })
+                (g.prom "sum by (state) (systemd_unit_state{${n}})" {
+                  instant = true;
+                  legend = "{{state}}";
+                })
               ];
-              thresholds = [
-                {
-                  value = null;
-                  color = "green";
-                }
-                {
-                  value = 1;
-                  color = "red";
-                }
+            })
+            (g.timeseries {
+              title = "Units by state over time";
+              decimals = 0;
+              queries = [
+                (g.prom "sum by (state) (systemd_unit_state{${n}})" {
+                  legend = "{{state}}";
+                })
               ];
             })
             (g.table {
-              title = "Failed";
-              queries = [ (g.prom ''systemd_unit_state{${n}, state="failed"} == 1'' { instant = true; }) ];
-              noValue = "None";
-            })
-            (g.stateTimeline {
-              title = "Failed over time";
-              description = "Units that were failed at some point in the time range";
+              title = "Timers";
+              description = "When each timer last fired";
+              unit = "dateTimeFromNow";
               queries = [
-                (g.prom
-                  ''max by (name) (systemd_unit_state{${n}, state="failed"}) and on (name) max_over_time(systemd_unit_state{${n}, state="failed"}[$__range]) == 1''
-                  {
-                    legend = "{{name}}";
-                  }
-                )
+                (g.prom "systemd_timer_last_trigger_seconds{${n}} * 1000" {
+                  instant = true;
+                  legend = "{{name}}";
+                })
               ];
-              noValue = "None";
+              transformations = [
+                {
+                  id = "organize";
+                  options.excludeByName = {
+                    Time = true;
+                    instance = true;
+                    job = true;
+                    node = true;
+                  };
+                }
+              ];
             })
           ]
         );

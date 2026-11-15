@@ -91,16 +91,6 @@ in
                   legend = "{{device}}";
                 })
               ];
-              thresholds = [
-                {
-                  value = null;
-                  color = "green";
-                }
-                {
-                  value = 1;
-                  color = "orange";
-                }
-              ];
             })
             (g.bargauge {
               title = "Power-on time";
