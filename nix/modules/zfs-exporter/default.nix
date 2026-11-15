@@ -10,7 +10,7 @@ let
   cfg = config.homelab.zfs-exporter;
 in
 {
-  imports = [ self.nixosModules.alloy ];
+  imports = [ self.nixosModules.alloy ] ++ self.lib.importsApply [ ./grafana.nix ];
   options.homelab.zfs-exporter = {
     enable = lib.mkEnableOption "zfs-exporter";
   };
