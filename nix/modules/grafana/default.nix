@@ -83,6 +83,7 @@ in
     inputs.homelab-storage.nixosModules.postgresql
   ]
   ++ self.lib.importsApply [
+    ./cluster.nix
     ./drilldown.nix
     ./overviews.nix
     ./homepage.nix

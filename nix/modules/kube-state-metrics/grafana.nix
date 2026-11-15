@@ -23,6 +23,114 @@ in
     '';
   };
   config = lib.mkIf config.homelab.kube-state-metrics.grafana.enable {
+    homelab.grafana.overviews.cluster = {
+      title = "Cluster";
+      rows.workloads = {
+        order = 100;
+        row = g.row { title = "Nodes and workloads"; } (
+          g.autoGrid { columns = 4; } [
+            (g.stat {
+              title = "Nodes ready";
+              queries = [
+                (g.prom ''sum(kube_node_status_condition{condition="Ready", status="true"})'' {
+                  instant = true;
+                  legend = "ready";
+                })
+                (g.prom "count(kube_node_info)" {
+                  instant = true;
+                  legend = "nodes";
+                })
+              ];
+            })
+            (g.stat {
+              title = "Pods not ready";
+              description = "Pods running or starting that aren't ready";
+              decimals = 0;
+              queries = [
+                (g.prom
+                  ''count((kube_pod_status_ready{condition="false"} == 1) and on (namespace, pod) (kube_pod_status_phase{phase=~"Running|Pending"} == 1)) or vector(0)''
+                  {
+                    instant = true;
+                  }
+                )
+              ];
+              thresholds = [
+                {
+                  value = null;
+                  color = "green";
+                }
+                {
+                  value = 1;
+                  color = "red";
+                }
+              ];
+            })
+            (g.stat {
+              title = "Restarts";
+              description = "Container restarts in the dashboard's time range";
+              decimals = 0;
+              queries = [
+                (g.prom "sum(increase(kube_pod_container_status_restarts_total[$__range])) or vector(0)" {
+                  instant = true;
+                })
+              ];
+              thresholds = [
+                {
+                  value = null;
+                  color = "green";
+                }
+                {
+                  value = 1;
+                  color = "orange";
+                }
+              ];
+            })
+            (g.stat {
+              title = "Deployments short of replicas";
+              decimals = 0;
+              queries = [
+                (g.prom "count(kube_deployment_status_replicas_unavailable > 0) or vector(0)" { instant = true; })
+              ];
+              thresholds = [
+                {
+                  value = null;
+                  color = "green";
+                }
+                {
+                  value = 1;
+                  color = "red";
+                }
+              ];
+            })
+            (g.table {
+              title = "Failed Jobs";
+              description = "Jobs that gave up; one that failed a try and then succeeded isn't here";
+              queries = [
+                (g.prom ''kube_job_status_condition{condition="Failed", status="true"} == 1'' { instant = true; })
+              ];
+              noValue = "None";
+            })
+            (g.table {
+              title = "Waiting containers";
+              queries = [ (g.prom "kube_pod_container_status_waiting_reason == 1" { instant = true; }) ];
+              noValue = "None";
+            })
+            (g.timeseries {
+              title = "Restarts by namespace";
+              decimals = 0;
+              queries = [
+                (g.prom
+                  "sum by (namespace) (increase(kube_pod_container_status_restarts_total[$__rate_interval])) > 0"
+                  {
+                    legend = "{{namespace}}";
+                  }
+                )
+              ];
+            })
+          ]
+        );
+      };
+    };
     homelab.grafana.drilldown.rows.pods = {
       order = 110;
       row = g.row { title = "Pods"; } (
