@@ -16,6 +16,39 @@ let
   };
   labels."app.kubernetes.io/name" = "alloy";
   hostname = "alloy.${workloads.domain}";
+  # The node role's address is the node's and the kubelet's port, of this node alone (discovery.kubernetes "nodes")
+  nodeTargetsConfig = lib.concatStrings (
+    lib.mapAttrsToList (
+      name: t:
+      let
+        id = "node_" + lib.replaceStrings [ "-" ] [ "_" ] name;
+      in
+      ''
+        discovery.relabel "${id}" {
+          targets = discovery.kubernetes.nodes.targets
+          rule {
+            source_labels = ["__address__"]
+            regex         = "(.+):\\d+"
+            target_label  = "__address__"
+            replacement   = "$1:${toString t.port}"
+          }
+          rule {
+            source_labels = ["__meta_kubernetes_node_name"]
+            target_label  = "instance"
+          }
+          rule {
+            source_labels = ["__meta_kubernetes_node_name"]
+            target_label  = "node"
+          }
+        }
+        prometheus.scrape "${id}" {
+          targets    = discovery.relabel.${id}.output
+          job_name   = "${name}"
+          forward_to = [prometheus.remote_write.mimir.receiver]
+        }
+      ''
+    ) cfg.nodeTargets
+  );
   monitor =
     { name, config, ... }:
     {
@@ -97,6 +130,23 @@ in
       type = lib.types.listOf lib.types.str;
       default = [ ];
     };
+    nodeTargets = lib.mkOption {
+      description = ''
+        Exporters running on the hosts themselves (NixOS services, not pods), scraped by the Alloy of each node at its
+        node's address and this port, with `job` the name and `instance` and `node` the node's name. Alloy carries the
+        target's egress label, `cluster.local/<name>-egress: allow`, which the CNI module turns into egress to the
+        hosts on that port. Like the monitors, scraped exactly while Alloy is on.
+      '';
+      type = lib.types.attrsOf (
+        lib.types.submodule {
+          options.port = lib.mkOption {
+            description = "The port the exporter listens on, on every node.";
+            type = lib.types.port;
+          };
+        }
+      );
+      default = { };
+    };
     monitors = lib.mkOption {
       description = ''
         What Alloy scrapes, a ServiceMonitor each. A module with metrics sets its own here (importing this module) and
@@ -111,7 +161,7 @@ in
   config = lib.mkIf cfg.enable (
     lib.mkMerge [
       {
-        homelab.alloy.allowEgress = lib.filter (e: e != null) (
+        homelab.alloy.allowEgress = lib.attrNames cfg.nodeTargets ++ lib.filter (e: e != null) (
           lib.mapAttrsToList (_: m: m.egress) cfg.monitors
         );
         # Its own metrics on the web port. A pod reaching its own address never leaves its network namespace; the egress
@@ -135,7 +185,7 @@ in
               namespaces.alloy.metadata.namespace = null;
               configMaps.alloy = {
                 metadata = { inherit labels; };
-                data."alloy-config.alloy" = builtins.readFile ./alloy-config.alloy;
+                data."alloy-config.alloy" = builtins.readFile ./alloy-config.alloy + nodeTargetsConfig;
               };
               # In Alloy's namespace, each selecting its Services' namespace: they exist only while Alloy does
               serviceMonitors = lib.mapAttrs (_: m: {

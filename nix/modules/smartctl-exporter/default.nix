@@ -1,4 +1,8 @@
-{ inputs, self, ... }:
+# smartctl_exporter on the host, as the NixOS service, scraped by Alloy: systemd gives it the block devices and the
+# two capabilities smartctl needs (DeviceAllow, CAP_SYS_RAWIO, CAP_SYS_ADMIN), which a pod would only get privileged.
+# It runs only while Alloy is on. The binary is andsens/smartctl_exporter: upstream plus --capabilities for the
+# temperature thresholds (prometheus-community/smartctl_exporter#305)
+{ self, ... }:
 {
   pkgs,
   lib,
@@ -6,76 +10,44 @@
   ...
 }:
 let
-  ccfg = config.homelab.cluster;
   cfg = config.homelab.smartctl-exporter;
-  smartctlExporter = pkgs.buildGo125Module rec {
-    name = "smartctl_exporter";
-    version = "0.14.0-1";
+  ecfg = config.services.prometheus.exporters.smartctl;
+  smartctlExporter = pkgs.buildGo126Module rec {
+    pname = "smartctl_exporter";
+    version = "0.15.0-unstable-2026-11-15";
     meta.mainProgram = "smartctl_exporter";
     src = pkgs.fetchFromGitHub {
       owner = "andsens";
-      repo = name;
-      rev = "90ee59151c6909baca5f21de8b4a5e3508ff7919";
-      hash = "sha256-0ZqD9qGpqiAliyC7ePM3tuOi8ScsGqPrhP0YKg8Cenk=";
+      repo = pname;
+      rev = "3be1dde9694fd2aca00d419f81396ce5e11d3079";
+      hash = "sha256-QrOXQk0Aocu8AOUnPH36KuVRMSjts7Tcd9c8zieNXzc=";
     };
     proxyVendor = true;
-    vendorHash = "sha256-wvmrLaGMZj2iSavKbSAGUfWtfNciHSoDR2sVUkzDxf4=";
-  };
-  image = pkgs.dockerTools.buildImage {
-    name = "cluster.local/${smartctlExporter.name}";
-    copyToRoot = [
-      smartctlExporter
-      pkgs.smartmontools
-    ]
-    ++ lib.optionals cfg.debug ccfg.debugTools;
-    config.User = "0:0";
-    config.Entrypoint = [
-      (pkgs.lib.getExe smartctlExporter)
-    ];
+    vendorHash = "sha256-1wI752Ledd9pPkEJmmfNRmfyQprZ/SKB+hS7rMew5ec=";
   };
 in
 {
   imports = [ self.nixosModules.alloy ];
   options.homelab.smartctl-exporter = {
     enable = lib.mkEnableOption "smartctl-exporter";
-    debug = lib.mkEnableOption "debug mode";
   };
-  config = lib.mkIf cfg.enable {
-    homelab.cluster.images = [ image ];
-    homelab.alloy.monitors.smartctl-exporter.perNode = true;
-    homelab.kubernetes.submodules.instances.smartctl-exporter = {
-      submodule = "manifest";
-      config = {
-        kubernetes.resources = {
-          # Cluster-scoped: no namespace, which kubenix gives every object by default
-          namespaces.smartctl-exporter.metadata.namespace = null;
-        };
-        submodules.instances = {
-          smartctl-exporter = {
-            submodule = "daemonset";
-            args = {
-              ports.metrics = 9633;
-              container = {
-                image = "${image.buildArgs.name}:${image.imageTag}";
-                imagePullPolicy = "Never";
-                args = [ "--smartctl.path=${pkgs.lib.getExe pkgs.smartmontools}" ];
-                securityContext.capabilities.add = [ "SYS_RAWIO" ];
-                livenessProbe.httpGet.port = "metrics";
-                readinessProbe.httpGet.port = "metrics";
-                volumeMounts."/dev".name = "dev";
-              };
-            };
-            config.kubernetes.resources.daemonSets.smartctl-exporter.spec.template.spec.volumes.dev.hostPath.path =
-              "/dev";
-          };
-          # A key apart from the DaemonSet instance, the same object name
-          smartctl-exporter-service = {
-            name = "smartctl-exporter";
-            submodule = "service";
-            args.ports.metrics = 9633;
-          };
-        };
-      };
+  config = lib.mkIf (cfg.enable && config.homelab.alloy.enable) {
+    services.prometheus.exporters.smartctl = {
+      enable = true;
+      extraFlags = [ "--smartctl.path=${lib.getExe' pkgs.smartmontools "smartctl"}" ];
     };
+    # The NixOS module runs nixpkgs' exporter; the same arguments, to the fork
+    systemd.services.prometheus-smartctl-exporter.serviceConfig.ExecStart = lib.mkForce (
+      "${lib.getExe smartctlExporter} "
+      + lib.escapeShellArgs (
+        [
+          "--web.listen-address=${ecfg.listenAddress}:${toString ecfg.port}"
+          "--smartctl.interval=${ecfg.maxInterval}"
+        ]
+        ++ map (device: "--smartctl.device=${device}") ecfg.devices
+        ++ ecfg.extraFlags
+      )
+    );
+    homelab.alloy.nodeTargets.smartctl-exporter.port = ecfg.port;
   };
 }
