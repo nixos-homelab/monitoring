@@ -10,7 +10,8 @@ let
   cfg = config.homelab.mimir;
 in
 {
-  imports = [ self.nixosModules.alloy ];
+  # Alloy writes to Mimir (allowEgress below)
+  imports = [ self.nixosModules.alloy ] ++ self.lib.importsApply [ ./metrics.nix ];
   options.homelab.mimir = {
     enable = lib.mkEnableOption "Mimir";
     retention = lib.mkOption {
@@ -23,7 +24,6 @@ in
   config = lib.mkIf cfg.enable {
     homelab.cluster.images = builtins.attrValues images;
     homelab.alloy.allowEgress = [ "mimir" ];
-    homelab.alloy.monitors.mimir.port = "web";
     homelab.kubernetes.submodules.instances.mimir = {
       submodule = "workload";
       args = {
