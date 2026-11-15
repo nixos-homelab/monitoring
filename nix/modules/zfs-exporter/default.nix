@@ -23,54 +23,20 @@ let
   };
 in
 {
+  imports = [ self.nixosModules.alloy ];
   options.homelab.zfs-exporter = {
     enable = lib.mkEnableOption "zfs-exporter";
     debug = lib.mkEnableOption "debug mode";
   };
   config = lib.mkIf cfg.enable {
     homelab.cluster.images = [ image ];
-    homelab.alloy.allowEgress = [ "zfs-exporter" ];
+    homelab.alloy.monitors.zfs-exporter.perNode = true;
     homelab.kubernetes.submodules.instances.zfs-exporter = {
       submodule = "manifest";
       config = {
         kubernetes.resources = {
           # Cluster-scoped: no namespace, which kubenix gives every object by default
           namespaces.zfs-exporter.metadata.namespace = null;
-          serviceMonitors.zfs-exporter = {
-            metadata.labels."app.kubernetes.io/name" = "zfs-exporter";
-            spec = {
-              selector.matchLabels."app.kubernetes.io/name" = "zfs-exporter";
-              endpoints = [
-                {
-                  port = "metrics";
-                  metricRelabelings = [
-                    {
-                      sourceLabels = [ "namespace" ];
-                      targetLabel = "exporter_namespace";
-                    }
-                    {
-                      sourceLabels = [ "pod" ];
-                      targetLabel = "exporter_pod";
-                    }
-                    {
-                      sourceLabels = [ "container" ];
-                      targetLabel = "exporter_container";
-                    }
-                    {
-                      sourceLabels = [ "instance" ];
-                      targetLabel = "instance";
-                      action = "replace";
-                      regex = "^(.*):9134$";
-                    }
-                    {
-                      regex = "^(namespace|pod|container)$";
-                      action = "labeldrop";
-                    }
-                  ];
-                }
-              ];
-            };
-          };
         };
         submodules.instances = {
           zfs-exporter = {

@@ -16,16 +16,73 @@ let
   };
   labels."app.kubernetes.io/name" = "alloy";
   hostname = "alloy.${workloads.domain}";
+  monitor =
+    { name, ... }:
+    {
+      options = {
+        namespace = lib.mkOption {
+          description = "The namespace of the Service to scrape.";
+          type = lib.types.str;
+          default = name;
+          defaultText = lib.literalExpression "name";
+        };
+        selector = lib.mkOption {
+          description = "Labels of the Services to scrape.";
+          type = lib.types.attrsOf lib.types.str;
+          default."app.kubernetes.io/name" = name;
+          defaultText = lib.literalExpression ''{ "app.kubernetes.io/name" = name; }'';
+        };
+        port = lib.mkOption {
+          description = "The name of the Service port with the metrics.";
+          type = lib.types.str;
+          default = "metrics";
+        };
+        path = lib.mkOption {
+          description = "The path of the metrics, null for /metrics.";
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+        };
+        perNode = lib.mkOption {
+          description = "Whether the target is one per node, about the node (node-exporter, smartctl): `instance` is then the node's name instead of the pod's address.";
+          type = lib.types.bool;
+          default = false;
+        };
+        egress = lib.mkOption {
+          description = "The policy name whose `cluster.local/<egress>-egress: allow` label lets Alloy reach the target, null for none.";
+          type = lib.types.nullOr lib.types.str;
+          default = name;
+          defaultText = lib.literalExpression "name";
+        };
+        endpoint = lib.mkOption {
+          description = "More of the ServiceMonitor endpoint (scheme, tlsConfig, interval, authorization, ...), merged over what the other options make.";
+          type = (pkgs.formats.json { }).type;
+          default = { };
+        };
+      };
+    };
 in
 {
+  key = "${toString __curPos.file}#modules.nixos.alloy";
   options.homelab.alloy = {
     enable = lib.mkEnableOption "alloy";
     allowEgress = lib.mkOption {
       description = "Which services alloy should be allowed access to";
       type = lib.types.listOf lib.types.str;
+      default = [ ];
+    };
+    monitors = lib.mkOption {
+      description = ''
+        What Alloy scrapes, a ServiceMonitor each. A module with metrics sets its own here (importing this module) and
+        gets scraped exactly when Alloy is on: no flag per monitor. Every target gets a `node` label, the node of the
+        pod behind it; the rest are the operator's (`namespace`, `service`, `pod`, `container`, `endpoint`, `job`,
+        `instance`), and a target's own labels of those names are kept as `exported_<name>`.
+      '';
+      type = lib.types.attrsOf (lib.types.submodule monitor);
+      default = { };
     };
   };
   config = lib.mkIf cfg.enable {
+    homelab.alloy.allowEgress = lib.filter (e: e != null) (lib.mapAttrsToList (_: m: m.egress) cfg.monitors);
     homelab.cluster.images = builtins.attrValues images;
     homelab.cluster.manifests = {
       alloy-static.source = ./alloy.yaml;
@@ -46,6 +103,32 @@ in
             metadata = { inherit labels; };
             data."alloy-config.alloy" = builtins.readFile ./alloy-config.alloy;
           };
+          # In Alloy's namespace, each selecting its Services' namespace: they exist only while Alloy does
+          serviceMonitors = lib.mapAttrs (_: m: {
+            metadata = { inherit labels; };
+            spec = {
+              namespaceSelector.matchNames = [ m.namespace ];
+              selector.matchLabels = m.selector;
+              endpoints = [
+                (lib.recursiveUpdate (
+                  {
+                    inherit (m) port;
+                    relabelings = [
+                      {
+                        sourceLabels = [ "__meta_kubernetes_pod_node_name" ];
+                        targetLabel = "node";
+                      }
+                    ]
+                    ++ lib.optional m.perNode {
+                      sourceLabels = [ "__meta_kubernetes_pod_node_name" ];
+                      targetLabel = "instance";
+                    };
+                  }
+                  // lib.optionalAttrs (m.path != null) { inherit (m) path; }
+                ) m.endpoint)
+              ];
+            };
+          }) cfg.monitors;
           persistentVolumeClaims.alloy.spec = {
             accessModes = [ "ReadWriteOnce" ];
             resources.requests.storage = "1Gi";

@@ -12,13 +12,14 @@ let
   manifest = hllib.images.chart pkgs ./images.lock ./node-exporter.yaml;
 in
 {
+  imports = [ self.nixosModules.alloy ];
   options.homelab.node-exporter = {
     enable = lib.mkEnableOption "node-exporter";
   };
   config = lib.mkIf cfg.enable {
     homelab.cluster.imageLocks.${toString ./images.lock} = manifest.refs;
     networking.firewall.allowedTCPPorts = lib.optional config.networking.firewall.enable 9100;
-    homelab.alloy.allowEgress = [ "node-exporter" ];
+    homelab.alloy.monitors.node-exporter.perNode = true;
     homelab.cluster.images = manifest.images;
     homelab.cluster.manifests.node-exporter-static.source = manifest.manifest;
     # Next to the DaemonSet of node-exporter-static: its Service and who may reach it
