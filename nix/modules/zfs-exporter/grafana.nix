@@ -46,6 +46,69 @@ in
     '';
   };
   config = lib.mkIf config.homelab.zfs-exporter.grafana.enable {
+    homelab.grafana.home.tiles = {
+      pools = {
+        group = "NAS";
+        order = 110;
+        panel = g.bargauge {
+          title = "Pools used";
+          unit = "percentunit";
+          min = 0;
+          max = 1;
+          links = [
+            {
+              title = "NAS health";
+              url = "/d/nas/nas?\${__url_time_range}";
+            }
+          ];
+          queries = [
+            (g.prom "zfs_pool_allocated_bytes / zfs_pool_size_bytes" {
+              instant = true;
+              legend = "{{pool}}";
+            })
+          ];
+          thresholds = [
+            {
+              value = null;
+              color = "green";
+            }
+            {
+              value = 0.8;
+              color = "orange";
+            }
+            {
+              value = 0.9;
+              color = "red";
+            }
+          ];
+        };
+      };
+      pool-health = {
+        group = "NAS";
+        order = 111;
+        panel = g.stat {
+          title = "Pool health";
+          links = [
+            {
+              title = "NAS health";
+              url = "/d/nas/nas?\${__url_time_range}";
+            }
+          ];
+          queries = [
+            (g.prom "zfs_pool_health" {
+              instant = true;
+              legend = "{{pool}}";
+            })
+          ];
+          mappings = [
+            {
+              type = "value";
+              options = lib.listToAttrs health;
+            }
+          ];
+        };
+      };
+    };
     homelab.grafana.overviews.nas = {
       title = "NAS health";
       variables.node = g.nodeVariable;

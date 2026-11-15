@@ -18,6 +18,30 @@ let
 in
 {
   config = lib.mkIf (config.homelab.grafana.enable && config.homelab.alloy.enable) {
+    homelab.grafana.home.tiles.endpoints = {
+      group = "Workloads";
+      order = 202;
+      panel = g.stat {
+        title = "Metrics endpoints";
+        decimals = 0;
+        links = [
+          {
+            title = "Services";
+            url = "/d/services/services?\${__url_time_range}";
+          }
+        ];
+        queries = [
+          (g.prom "sum(up)" {
+            instant = true;
+            legend = "up";
+          })
+          (g.prom "count(up)" {
+            instant = true;
+            legend = "scraped";
+          })
+        ];
+      };
+    };
     homelab.grafana.overviews.services = {
       title = "Services";
       description = "Every workload and metrics endpoint, up or down; a value opens its workload";
