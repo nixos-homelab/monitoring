@@ -59,6 +59,8 @@
         flake = {
           lib = {
             importsApply = map (path: importApply path { inherit self inputs; });
+            # Dashboard builders for homelab.grafana.dashboards
+            grafana = import ./nix/lib/grafana.nix { inherit lib; };
           };
           nixosModules = {
             alloy = importApply ./nix/modules/alloy { inherit self inputs; };
@@ -73,13 +75,8 @@
         };
         perSystem =
           { pkgs, lib, ... }:
-          {
-            # Dead Nix code. Pattern names stay: modules take { config, lib, pkgs, ... } whether they use them or not
-            checks.deadnix = pkgs.runCommand "deadnix" { nativeBuildInputs = [ pkgs.deadnix ]; } ''
-              deadnix --fail --no-lambda-pattern-names ${self}
-              touch $out
-            '';
-            checks.manifests = inputs.homelab-shared.lib.checks.manifests {
+          let
+            manifests = inputs.homelab-shared.lib.checks.manifests {
               inherit pkgs;
               modules = lib.attrValues self.nixosModules ++ [
                 {
@@ -92,9 +89,29 @@
                     zfs-exporter.enable = true;
                     homepage.enable = true;
                     kube-state-metrics.enable = true;
+                    # A board through every builder, as the home dashboard
+                    grafana.homeDashboard = "check";
+                    grafana.dashboards.check.dashboard = import ./nix/checks/dashboard.nix {
+                      inherit (self.lib) grafana;
+                    };
                   };
                 }
               ];
+            };
+          in
+          {
+            # Dead Nix code. Pattern names stay: modules take { config, lib, pkgs, ... } whether they use them or not
+            checks.deadnix = pkgs.runCommand "deadnix" { nativeBuildInputs = [ pkgs.deadnix ]; } ''
+              deadnix --fail --no-lambda-pattern-names ${self}
+              touch $out
+            '';
+            checks.manifests = manifests;
+            # The pinned Grafana on the payload the manifests check rendered
+            checks.grafana = import ./nix/checks/grafana.nix {
+              inherit pkgs;
+              image =
+                (inputs.homelab-shared.lib.images.pinned pkgs ./nix/modules/grafana/Dockerfile)."grafana/grafana";
+              payload = manifests.passthru.manifests;
             };
             packages = {
               options-docs = inputs.docs.lib.docs.options {
