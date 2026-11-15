@@ -83,6 +83,9 @@ in
   };
   config = lib.mkIf cfg.enable {
     homelab.alloy.allowEgress = lib.filter (e: e != null) (lib.mapAttrsToList (_: m: m.egress) cfg.monitors);
+    # Its own metrics on the web port. A pod reaching its own address never leaves its network namespace; the egress
+    # label is for the Alloy pods of other nodes
+    homelab.alloy.monitors.alloy.port = "web";
     homelab.cluster.images = builtins.attrValues images;
     homelab.cluster.manifests = {
       alloy-static.source = ./alloy.yaml;
