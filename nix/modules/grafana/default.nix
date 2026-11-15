@@ -15,14 +15,14 @@ in
   };
   imports = [
     inputs.homelab-storage.nixosModules.postgresql
-    self.nixosModules.alloy
   ]
-  ++ self.lib.importsApply [ ./homepage.nix ];
+  ++ self.lib.importsApply [
+    ./homepage.nix
+    ./metrics.nix
+  ];
   config = lib.mkIf cfg.enable {
     homelab.cluster.images = builtins.attrValues images;
     homelab.postgresql.databases.grafana.backup.enable = lib.mkDefault true;
-    # /metrics on the web port, without auth: grafana.ini leaves [metrics] at its defaults
-    homelab.alloy.monitors.grafana.port = "web";
     assertions = [
       {
         assertion = config.homelab.postgresql.enable;
