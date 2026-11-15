@@ -45,5 +45,5 @@ For the full list of module options, see [the documentation](https://nixos-homel
 - **kube-state-metrics**: metrics about the cluster's objects (Deployments,
   pods, nodes, ...), Secrets excepted.
 - **node-exporter**: host-level metrics (CPU, memory, disk, network).
-- **smartctl-exporter**: disk S.M.A.R.T. health metrics.
-- **zfs-exporter**: ZFS pool metrics.
+- **smartctl-exporter**: disk S.M.A.R.T. health metrics, from a NixOS service on each host.
+- **zfs-exporter**: ZFS pool and dataset metrics, from a NixOS service on each host.
