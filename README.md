@@ -42,6 +42,8 @@ For the full list of module options, see [the options reference](https://nixos-h
 - **alloy**: the [Grafana Alloy](https://grafana.com/docs/alloy/) agent
   that scrapes and forwards metrics/logs, with a per-service
   `integrations` allow-list like `homepage`'s.
+- **kube-state-metrics**: metrics about the cluster's objects (Deployments,
+  pods, nodes, ...), Secrets excepted.
 - **node-exporter**: host-level metrics (CPU, memory, disk, network).
 - **smartctl-exporter**: disk S.M.A.R.T. health metrics.
 - **zfs-exporter**: ZFS pool metrics.

@@ -7,6 +7,10 @@ metadata:
   labels:
     app.kubernetes.io/name: alloy
 ---
+# What alloy-config.alloy reads: its discovery.kubernetes components, the ServiceMonitors with the Services, endpoints
+# and pods they select, and the kubelet's metrics (nodes/metrics: its /metrics and /metrics/*, not the rest of the
+# kubelet API that nodes/proxy opens, exec included). A monitor whose endpoint takes a credential from a Secret or
+# ConfigMap needs get on those as well
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -14,34 +18,20 @@ metadata:
     app.kubernetes.io/name: alloy
   name: alloy
 rules:
-- apiGroups: ["", discovery.k8s.io, networking.k8s.io]
-  resources: [endpoints, endpointslices, ingresses, pods, services]
-  verbs: [get, list, watch]
 - apiGroups: [""]
-  resources: [pods, pods/log, namespaces]
+  resources: [endpoints, namespaces, nodes, pods, services]
   verbs: [get, list, watch]
-- apiGroups: [monitoring.grafana.com]
-  resources: [podlogs]
+- apiGroups: [discovery.k8s.io]
+  resources: [endpointslices]
+  verbs: [get, list, watch]
+- apiGroups: [networking.k8s.io]
+  resources: [ingresses]
   verbs: [get, list, watch]
 - apiGroups: [monitoring.coreos.com]
-  resources: [prometheusrules]
-  verbs: [get, list, watch]
-- apiGroups: [monitoring.coreos.com]
-  resources: [podmonitors, servicemonitors, probes, scrapeconfigs]
+  resources: [servicemonitors]
   verbs: [get, list, watch]
 - apiGroups: [""]
-  resources: [events]
-  verbs: [get, list, watch]
-- apiGroups: [""]
-  resources: [configmaps, secrets]
-  verbs: [get, list, watch]
-- apiGroups: [apps, extensions]
-  resources: [replicasets]
-  verbs: [get, list, watch]
-- apiGroups: [""]
-  resources: [nodes, nodes/proxy, nodes/metrics]
-  verbs: [get, list, watch]
-- nonResourceURLs: [/metrics]
+  resources: [nodes/metrics]
   verbs: [get]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
