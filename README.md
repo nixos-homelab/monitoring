@@ -48,6 +48,7 @@ For the full list of module options, see [the documentation](https://nixos-homel
   pods, nodes, ...), Secrets excepted.
 - **node-exporter**: host-level metrics (CPU, memory, disk, network).
 - **smartctl-exporter**: disk S.M.A.R.T. health metrics, from a NixOS service on each host.
+- **systemd-exporter**: the state of each host's systemd units, failed ones included, from a NixOS service on each host.
 - **zfs-exporter**: ZFS pool and dataset metrics, from a NixOS service on each host.
 
 ## Dashboards
