@@ -57,6 +57,17 @@ let
           type = lib.types.nullOr lib.types.port;
           default = null;
         };
+        manifest = lib.mkOption {
+          description = ''
+            The `homelab.kubernetes.submodules` instance (a `manifest`, `workload`, `deployment` or `daemonset`) the
+            `podPort` policy goes into, so it lands in the same manifest as the namespace it needs. Null for a manifest of
+            its own, `<name>-metrics-policy`, for targets without an instance (k3s's CoreDNS, objects written straight to
+            `services.k3s.manifests`); k3s then applies it on a later pass, once the namespace exists.
+          '';
+          type = lib.types.nullOr lib.types.str;
+          default = config.namespace;
+          defaultText = lib.literalExpression "namespace";
+        };
         podSelector = lib.mkOption {
           description = "Labels of the pods `podPort` is on, in `namespace`.";
           type = lib.types.attrsOf lib.types.str;
@@ -304,14 +315,13 @@ in
         };
       }
       {
-        # A policy per monitor with a podPort: Alloy reaches that port of the pods and nothing else of the workload
-        homelab.kubernetes.submodules.instances = lib.mapAttrs' (
-          name: m:
-          lib.nameValuePair "${name}-metrics-policy" {
-            submodule = "manifest";
-            config = {
-              kubernetes.namespace = m.namespace;
-              submodules.instances.metrics = {
+        # A policy per monitor with a podPort: Alloy reaches that port of the pods and nothing else of the workload. In
+        # the target's own instance where it has one, so the policy and its namespace share a manifest
+        homelab.kubernetes.submodules.instances = lib.mkMerge (
+          lib.mapAttrsToList (
+            name: m:
+            let
+              policy = {
                 name = "${name}-metrics";
                 submodule = "pods";
                 args = {
@@ -319,9 +329,21 @@ in
                   ports.metrics = m.podPort;
                 };
               };
-            };
-          }
-        ) (lib.filterAttrs (_: m: m.podPort != null) cfg.monitors);
+            in
+            if m.manifest != null then
+              { ${m.manifest}.config.submodules.instances."${name}-metrics" = policy; }
+            else
+              {
+                "${name}-metrics-policy" = {
+                  submodule = "manifest";
+                  config = {
+                    kubernetes.namespace = m.namespace;
+                    submodules.instances.metrics = policy;
+                  };
+                };
+              }
+          ) (lib.filterAttrs (_: m: m.podPort != null) cfg.monitors)
+        );
       }
     ]
   );
