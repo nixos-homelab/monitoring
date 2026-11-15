@@ -130,6 +130,11 @@ in
       type = lib.types.listOf lib.types.str;
       default = [ ];
     };
+    metrics.enable = lib.mkOption {
+      description = "Whether Alloy scrapes its own metrics.";
+      type = lib.types.bool;
+      default = true;
+    };
     nodeTargets = lib.mkOption {
       description = ''
         Exporters running on the hosts themselves (NixOS services, not pods), scraped by the Alloy of each node at its
@@ -166,7 +171,7 @@ in
         );
         # Its own metrics on the web port. A pod reaching its own address never leaves its network namespace; the egress
         # label is for the Alloy pods of other nodes
-        homelab.alloy.monitors.alloy.port = "web";
+        homelab.alloy.monitors.alloy = lib.mkIf cfg.metrics.enable { port = "web"; };
         homelab.cluster.images = builtins.attrValues images;
         homelab.cluster.manifests = {
           alloy-static.source = ./alloy.yaml;
