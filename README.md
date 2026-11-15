@@ -38,6 +38,8 @@ For the full list of module options, see [the documentation](https://nixos-homel
 ## Modules
 
 - **grafana**: dashboards, provisioned with datasources for Mimir.
+  `homelab.grafana.dashboards.<name>` provisions a dashboard (read-only in
+  the UI), and `homelab.grafana.homeDashboard` makes one Grafana's home.
 - **mimir**: long-term Prometheus-compatible metrics storage.
 - **alloy**: the [Grafana Alloy](https://grafana.com/docs/alloy/) agent
   that scrapes and forwards metrics/logs, with a per-service
@@ -47,3 +49,39 @@ For the full list of module options, see [the documentation](https://nixos-homel
 - **node-exporter**: host-level metrics (CPU, memory, disk, network).
 - **smartctl-exporter**: disk S.M.A.R.T. health metrics, from a NixOS service on each host.
 - **zfs-exporter**: ZFS pool and dataset metrics, from a NixOS service on each host.
+
+## Dashboards
+
+`lib.grafana` builds dashboards in Grafana's v2 resource format, with the
+Mimir datasource set on every query. Panels go where they are shown, in
+the layout; `dashboard` numbers them.
+
+```nix
+{ inputs, ... }:
+{
+  homelab.grafana.dashboards.nas.dashboard =
+    with inputs.homelab-monitoring.lib.grafana;
+    dashboard {
+      name = "nas";
+      title = "NAS";
+      layout = rows [
+        (row { title = "CPU"; } (autoGrid { } [
+          (timeseries {
+            title = "Busy";
+            unit = "percentunit";
+            queries = [
+              (prom ''1 - avg(rate(node_cpu_seconds_total{mode="idle"}[$__rate_interval]))'' { })
+            ];
+          })
+        ]))
+      ];
+    };
+}
+```
+
+Builders: `dashboard`; layouts `grid`, `autoGrid`, `rows`/`row`,
+`tabs`/`tab`; panels `timeseries`, `stat`, `gauge`, `bargauge`, `table`,
+`stateTimeline`, `text`, or `panel "<plugin>"` for any other; `prom` for a
+query, `queryVariable`, `link`, and `whenVariable` to show a row, tab or
+item only for a variable's value. A dashboard can also be a JSON file
+(`dashboards.<name>.dashboard = ./board.json;`).
