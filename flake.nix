@@ -64,6 +64,7 @@
             alloy = importApply ./nix/modules/alloy { inherit self inputs; };
             grafana = importApply ./nix/modules/grafana { inherit self inputs; };
             homepage = importApply ./nix/modules/homepage { inherit self inputs; };
+            kube-state-metrics = importApply ./nix/modules/kube-state-metrics { inherit self inputs; };
             node-exporter = importApply ./nix/modules/node-exporter { inherit self inputs; };
             mimir = importApply ./nix/modules/mimir { inherit self inputs; };
             smartctl-exporter = importApply ./nix/modules/smartctl-exporter { inherit self inputs; };
@@ -90,6 +91,7 @@
                     smartctl-exporter.enable = true;
                     zfs-exporter.enable = true;
                     homepage.enable = true;
+                    kube-state-metrics.enable = true;
                   };
                 }
               ];
@@ -106,6 +108,7 @@
                     "homelab.grafana"
                     "homelab.homepage.integrations.grafana"
                   ];
+                  kube-state-metrics = [ "homelab.kube-state-metrics" ];
                   node-exporter = [ "homelab.node-exporter" ];
                   mimir = [ "homelab.mimir" ];
                   smartctl-exporter = [ "homelab.smartctl-exporter" ];
