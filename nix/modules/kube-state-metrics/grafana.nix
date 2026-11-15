@@ -1,4 +1,5 @@
-# Rows of the Workload dashboard from kube-state-metrics: the workload's pods, restarts and why containers wait
+# kube-state-metrics' rows: the cluster's objects on the Services and Cluster dashboards, one workload's pods on the
+# Workload dashboard
 { self, ... }:
 {
   lib,
@@ -8,11 +9,83 @@
 let
   g = self.lib.grafana;
   w = ''namespace="$workload"'';
+  # The Workload dashboard with the workload of the value clicked on
+  toWorkload = [
+    {
+      title = "Workload";
+      url = "/d/workload/workload?var-workload=\${__field.labels.namespace}&\${__url_time_range}";
+    }
+  ];
+  # Two instant series side by side in a table, renamed: { A = "available"; B = "desired"; }
+  sideBySide = names: [
+    {
+      id = "merge";
+    }
+    {
+      id = "organize";
+      options = {
+        excludeByName.Time = true;
+        renameByName = lib.mapAttrs' (ref: name: lib.nameValuePair "Value #${ref}" name) names;
+      };
+    }
+  ];
+  replicas =
+    filter:
+    g.table {
+      title = "Replicas";
+      description = "Available and desired, per Deployment";
+      queries = [
+        (g.prom "kube_deployment_status_replicas_available${filter}" { instant = true; })
+        (g.prom "kube_deployment_spec_replicas${filter}" { instant = true; })
+      ];
+      transformations = sideBySide {
+        A = "available";
+        B = "desired";
+      };
+    };
+  containers =
+    filter:
+    g.table {
+      title = "Containers";
+      description = "Each container's state, and the reason for one that isn't running";
+      queries = [
+        (g.prom
+          ''label_replace(kube_pod_container_status_running${filter} == 1, "state", "running", "", "")''
+          {
+            instant = true;
+          }
+        )
+        (g.prom
+          ''label_replace(kube_pod_container_status_waiting_reason${filter} == 1, "state", "waiting", "", "")''
+          {
+            instant = true;
+          }
+        )
+        (g.prom
+          ''label_replace(kube_pod_container_status_terminated_reason${filter} == 1, "state", "terminated", "", "")''
+          {
+            instant = true;
+          }
+        )
+      ];
+      transformations = [
+        { id = "merge"; }
+        {
+          id = "organize";
+          options.excludeByName = {
+            Time = true;
+            "Value #A" = true;
+            "Value #B" = true;
+            "Value #C" = true;
+          };
+        }
+      ];
+    };
 in
 {
   imports = [ self.nixosModules.grafana ];
   options.homelab.kube-state-metrics.grafana.enable = lib.mkOption {
-    description = "Whether the Workload dashboard has kube-state-metrics' row: pods, restarts, waiting containers.";
+    description = "Whether the Services, Cluster and Workload dashboards have kube-state-metrics' rows.";
     type = lib.types.bool;
     default =
       config.homelab.kube-state-metrics.enable
@@ -48,27 +121,11 @@ in
                   }
                 )
               ];
-              thresholds = [
-                {
-                  value = null;
-                  color = "red";
-                }
-                {
-                  value = 0.99;
-                  color = "green";
-                }
-              ];
               options = {
-                colorMode = "background";
                 textMode = "value_and_name";
                 justifyMode = "center";
               };
-              fieldLinks = [
-                {
-                  title = "Workload";
-                  url = "/d/workload/workload?var-workload=\${__field.labels.namespace}&\${__url_time_range}";
-                }
-              ];
+              fieldLinks = toWorkload;
             })
           ]
         );
@@ -79,9 +136,9 @@ in
       rows.workloads = {
         order = 100;
         row = g.row { title = "Nodes and workloads"; } (
-          g.autoGrid { columns = 4; } [
+          g.autoGrid { columns = 3; } [
             (g.stat {
-              title = "Nodes ready";
+              title = "Nodes";
               queries = [
                 (g.prom ''sum(kube_node_status_condition{condition="Ready", status="true"})'' {
                   instant = true;
@@ -94,26 +151,13 @@ in
               ];
             })
             (g.stat {
-              title = "Pods not ready";
-              description = "Pods running or starting that aren't ready";
+              title = "Pods by phase";
               decimals = 0;
               queries = [
-                (g.prom
-                  ''count((kube_pod_status_ready{condition="false"} == 1) and on (namespace, pod) (kube_pod_status_phase{phase=~"Running|Pending"} == 1)) or vector(0)''
-                  {
-                    instant = true;
-                  }
-                )
-              ];
-              thresholds = [
-                {
-                  value = null;
-                  color = "green";
-                }
-                {
-                  value = 1;
-                  color = "red";
-                }
+                (g.prom "sum by (phase) (kube_pod_status_phase)" {
+                  instant = true;
+                  legend = "{{phase}}";
+                })
               ];
             })
             (g.stat {
@@ -121,57 +165,50 @@ in
               description = "Container restarts in the dashboard's time range";
               decimals = 0;
               queries = [
-                (g.prom "sum(increase(kube_pod_container_status_restarts_total[$__range])) or vector(0)" {
-                  instant = true;
-                })
-              ];
-              thresholds = [
-                {
-                  value = null;
-                  color = "green";
-                }
-                {
-                  value = 1;
-                  color = "orange";
-                }
+                (g.prom "sum(increase(kube_pod_container_status_restarts_total[$__range]))" { instant = true; })
               ];
             })
-            (g.stat {
-              title = "Deployments short of replicas";
-              decimals = 0;
+            (replicas "")
+            (g.table {
+              title = "Jobs";
+              description = "Each Job kept, by outcome";
               queries = [
-                (g.prom "count(kube_deployment_status_replicas_unavailable > 0) or vector(0)" { instant = true; })
+                (g.prom ''
+                  label_replace(kube_job_complete{condition="true"} == 1, "outcome", "complete", "", "")
+                  or label_replace(kube_job_failed{condition="true"} == 1, "outcome", "failed", "", "")
+                  or label_replace(kube_job_status_active > 0, "outcome", "running", "", "")
+                '' { instant = true; })
               ];
-              thresholds = [
+              transformations = [
                 {
-                  value = null;
-                  color = "green";
-                }
-                {
-                  value = 1;
-                  color = "red";
+                  id = "organize";
+                  options.excludeByName = {
+                    Time = true;
+                    Value = true;
+                    condition = true;
+                  };
                 }
               ];
             })
             (g.table {
-              title = "Failed Jobs";
-              description = "Jobs that gave up; one that failed a try and then succeeded isn't here";
+              title = "CronJobs";
+              description = "When each last ran, and last succeeded";
+              unit = "dateTimeFromNow";
               queries = [
-                (g.prom ''kube_job_status_condition{condition="Failed", status="true"} == 1'' { instant = true; })
+                (g.prom "kube_cronjob_status_last_schedule_time * 1000" { instant = true; })
+                (g.prom "kube_cronjob_status_last_successful_time * 1000" { instant = true; })
               ];
-              noValue = "None";
+              transformations = sideBySide {
+                A = "last run";
+                B = "last success";
+              };
             })
-            (g.table {
-              title = "Waiting containers";
-              queries = [ (g.prom "kube_pod_container_status_waiting_reason == 1" { instant = true; }) ];
-              noValue = "None";
-            })
+            (containers "")
             (g.timeseries {
               title = "Restarts by namespace";
               decimals = 0;
               queries = [
-                (g.prom
-                  "sum by (namespace) (increase(kube_pod_container_status_restarts_total[$__rate_interval])) > 0"
+                (g.prom "sum by (namespace) (increase(kube_pod_container_status_restarts_total[$__rate_interval]))"
                   {
                     legend = "{{namespace}}";
                   }
@@ -187,47 +224,27 @@ in
       row = g.row { title = "Pods"; } (
         g.autoGrid { columns = 4; } [
           (g.stat {
-            title = "Ready";
-            description = "Pods ready, of those running or starting: a finished Job's pods don't count";
+            title = "Pods by phase";
+            decimals = 0;
             queries = [
-              (g.prom ''sum(kube_pod_status_ready{${w}, condition="true"}) or vector(0)'' {
+              (g.prom "sum by (phase) (kube_pod_status_phase{${w}})" {
                 instant = true;
-                legend = "ready";
-              })
-              (g.prom ''sum(kube_pod_status_phase{${w}, phase=~"Running|Pending"}) or vector(0)'' {
-                instant = true;
-                legend = "pods";
+                legend = "{{phase}}";
               })
             ];
           })
           (g.stat {
             title = "Restarts";
             description = "Container restarts in the dashboard's time range";
+            decimals = 0;
             queries = [
-              (g.prom "sum(increase(kube_pod_container_status_restarts_total{${w}}[$__range])) or vector(0)" {
+              (g.prom "sum(increase(kube_pod_container_status_restarts_total{${w}}[$__range]))" {
                 instant = true;
               })
             ];
-            decimals = 0;
-            thresholds = [
-              {
-                value = null;
-                color = "green";
-              }
-              {
-                value = 1;
-                color = "orange";
-              }
-            ];
           })
-          (g.table {
-            title = "Waiting containers";
-            description = "Containers that are not running, and why";
-            queries = [
-              (g.prom "kube_pod_container_status_waiting_reason{${w}} == 1" { instant = true; })
-            ];
-            noValue = "None";
-          })
+          (replicas "{${w}}")
+          (containers "{${w}}")
           (g.timeseries {
             title = "Restarts over time";
             decimals = 0;

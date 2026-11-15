@@ -240,7 +240,7 @@ in
                 title = "NFS requests";
                 unit = "reqps";
                 queries = [
-                  (g.prom "sum by (method) (rate(node_nfsd_requests_total{${n}}[$__rate_interval])) > 0" {
+                  (g.prom "sum by (method) (rate(node_nfsd_requests_total{${n}}[$__rate_interval]))" {
                     legend = "{{method}}";
                   })
                 ];

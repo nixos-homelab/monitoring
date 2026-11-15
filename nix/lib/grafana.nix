@@ -124,6 +124,8 @@ let
       fieldLinks ? null,
       # QueryOptionsSpec: interval, maxDataPoints, timeFrom, ...
       queryOptions ? { },
+      # [ { id; options ? { }; } ]: Grafana's transformations by id (merge, organize, ...), in order
+      transformations ? [ ],
       transparent ? null,
     }:
     {
@@ -144,7 +146,11 @@ let
                   };
                 }
               ) queries;
-              transformations = [ ];
+              transformations = map (t: {
+                kind = "Transformation";
+                group = t.id;
+                spec.options = t.options or { };
+              }) transformations;
               inherit queryOptions;
             };
           };
