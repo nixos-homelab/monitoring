@@ -249,6 +249,8 @@ in
               minReadySeconds = 10;
               template.metadata.annotations."kubectl.kubernetes.io/default-container" = "alloy";
               template.spec = {
+                # The ServiceAccount of alloy-static.yaml, which its ClusterRole is bound to
+                serviceAccountName = "alloy";
                 containers.config-reloader = {
                   image = images."quay.io/prometheus-operator/prometheus-config-reloader".ref;
                   imagePullPolicy = "Never";
