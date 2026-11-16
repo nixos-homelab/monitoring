@@ -117,6 +117,9 @@
                 (inputs.homelab-shared.lib.images.pinned pkgs ./nix/modules/grafana/Dockerfile)."grafana/grafana";
               payload = manifests.passthru.manifests;
             };
+            # Grafana with storage's PostgreSQL on one node on k3s' bundled network, under the NixOS test driver (needs
+            # KVM)
+            checks.grafana-cluster = import ./nix/tests/grafana.nix { inherit self inputs pkgs; };
             packages = {
               options-docs = inputs.docs.lib.docs.options {
                 inherit pkgs;
