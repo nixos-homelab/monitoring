@@ -35,8 +35,12 @@ let
       title = "Replicas";
       description = "Available and desired, per Deployment";
       queries = [
-        (g.prom "kube_deployment_status_replicas_available${filter}" { instant = true; })
-        (g.prom "kube_deployment_spec_replicas${filter}" { instant = true; })
+        (g.prom "max by (namespace, deployment) (kube_deployment_status_replicas_available${filter})" {
+          instant = true;
+        })
+        (g.prom "max by (namespace, deployment) (kube_deployment_spec_replicas${filter})" {
+          instant = true;
+        })
       ];
       transformations = sideBySide {
         A = "available";
@@ -50,19 +54,19 @@ let
       description = "Each container's state, and the reason for one that isn't running";
       queries = [
         (g.prom
-          ''label_replace(kube_pod_container_status_running${filter} == 1, "state", "running", "", "")''
+          ''max by (namespace, pod, container, reason, state) (label_replace(kube_pod_container_status_running${filter} == 1, "state", "running", "", ""))''
           {
             instant = true;
           }
         )
         (g.prom
-          ''label_replace(kube_pod_container_status_waiting_reason${filter} == 1, "state", "waiting", "", "")''
+          ''max by (namespace, pod, container, reason, state) (label_replace(kube_pod_container_status_waiting_reason${filter} == 1, "state", "waiting", "", ""))''
           {
             instant = true;
           }
         )
         (g.prom
-          ''label_replace(kube_pod_container_status_terminated_reason${filter} == 1, "state", "terminated", "", "")''
+          ''max by (namespace, pod, container, reason, state) (label_replace(kube_pod_container_status_terminated_reason${filter} == 1, "state", "terminated", "", ""))''
           {
             instant = true;
           }
@@ -219,9 +223,11 @@ in
               description = "Each Job kept, by outcome";
               queries = [
                 (g.prom ''
-                  label_replace(kube_job_complete{condition="true"} == 1, "outcome", "complete", "", "")
-                  or label_replace(kube_job_failed{condition="true"} == 1, "outcome", "failed", "", "")
-                  or label_replace(kube_job_status_active > 0, "outcome", "running", "", "")
+                  max by (namespace, job_name, outcome) (
+                    label_replace(kube_job_complete{condition="true"} == 1, "outcome", "complete", "", "")
+                    or label_replace(kube_job_failed{condition="true"} == 1, "outcome", "failed", "", "")
+                    or label_replace(kube_job_status_active > 0, "outcome", "running", "", "")
+                  )
                 '' { instant = true; })
               ];
               transformations = [
@@ -238,10 +244,14 @@ in
             (g.table {
               title = "CronJobs";
               description = "When each last ran, and last succeeded";
-              unit = "dateTimeFromNow";
+              overrides = g.numbersIn "dateTimeFromNow";
               queries = [
-                (g.prom "kube_cronjob_status_last_schedule_time * 1000" { instant = true; })
-                (g.prom "kube_cronjob_status_last_successful_time * 1000" { instant = true; })
+                (g.prom "max by (namespace, cronjob) (kube_cronjob_status_last_schedule_time) * 1000" {
+                  instant = true;
+                })
+                (g.prom "max by (namespace, cronjob) (kube_cronjob_status_last_successful_time) * 1000" {
+                  instant = true;
+                })
               ];
               transformations = sideBySide {
                 A = "last run";

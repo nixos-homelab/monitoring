@@ -72,21 +72,16 @@ in
             (g.table {
               title = "Timers";
               description = "When each timer last fired";
-              unit = "dateTimeFromNow";
+              overrides = g.numbersIn "dateTimeFromNow";
               queries = [
-                (g.prom "systemd_timer_last_trigger_seconds{${n}} * 1000" {
-                  instant = true;
-                  legend = "{{name}}";
-                })
+                (g.prom "max by (name) (systemd_timer_last_trigger_seconds{${n}}) * 1000" { instant = true; })
               ];
               transformations = [
                 {
                   id = "organize";
-                  options.excludeByName = {
-                    Time = true;
-                    instance = true;
-                    job = true;
-                    node = true;
+                  options = {
+                    excludeByName.Time = true;
+                    renameByName.Value = "last fired";
                   };
                 }
               ];
