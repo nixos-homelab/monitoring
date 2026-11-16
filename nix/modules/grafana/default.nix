@@ -209,7 +209,11 @@ in
                   timeInterval = "30s";
                 };
               };
-              deleteDatasources = lib.optional (!config.homelab.mimir.enable) "mimir";
+              # By name and org, as Grafana takes them: a bare name stops its provisioning, and Grafana with it
+              deleteDatasources = lib.optional (!config.homelab.mimir.enable) {
+                name = "Mimir";
+                orgId = 1;
+              };
             };
             "dashboards.yaml" = builtins.toJSON {
               apiVersion = 1;

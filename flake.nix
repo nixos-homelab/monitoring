@@ -18,6 +18,7 @@
       inputs.flake-parts.follows = "flake-parts";
       inputs.setup-secrets.follows = "setup-secrets";
       inputs.kube-generators.follows = "kube-generators";
+      inputs.homelab-monitoring.follows = "";
     };
     homelab-storage = {
       url = "github:nixos-homelab/storage";
@@ -27,6 +28,7 @@
       inputs.setup-secrets.follows = "setup-secrets";
       inputs.kube-generators.follows = "kube-generators";
       inputs.homelab-shared.follows = "homelab-shared";
+      inputs.homelab-monitoring.follows = "";
       inputs.docs.follows = "docs";
     };
     docs = {
@@ -115,6 +117,9 @@
                 (inputs.homelab-shared.lib.images.pinned pkgs ./nix/modules/grafana/Dockerfile)."grafana/grafana";
               payload = manifests.passthru.manifests;
             };
+            # Grafana with storage's PostgreSQL on one node on k3s' bundled network, under the NixOS test driver (needs
+            # KVM)
+            checks.grafana-cluster = import ./nix/tests/grafana.nix { inherit self inputs pkgs; };
             packages = {
               options-docs = inputs.docs.lib.docs.options {
                 inherit pkgs;
