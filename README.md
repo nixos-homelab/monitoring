@@ -87,3 +87,40 @@ Builders: `dashboard`; layouts `grid`, `autoGrid`, `rows`/`row`,
 query, `queryVariable`, `link`, and `whenVariable` to show a row, tab or
 item only for a variable's value. A dashboard can also be a JSON file
 (`dashboards.<name>.dashboard = ./board.json;`).
+
+### Screenshots
+
+`lib.screenshots` renders dashboards without a cluster: the pinned Grafana
+on a dashboard's JSON, its Mimir datasource pointed at a Prometheus that
+serves samples generated for the dashboard's queries, and headless Chromium
+taking the whole page as a PNG. Each dashboard is a derivation of its own,
+so a changed one renders again on its own, in seconds.
+
+```console
+$ nix build .#screenshots.nas           # the mixed scenario
+$ nix build .#screenshots.nas.failing   # or healthy
+$ nix build .#screenshots.all           # every dashboard, mixed
+```
+
+Next to `<name>.png`, `<name>.log` lists every query the page ran, with
+what came back (frames and rows, no data, or the error), and what the page
+reported.
+
+The data comes from a scenario (`lib.screenshots.scenarios`: `healthy`,
+`mixed`, `failing`): label tables that keep a workload's namespace, pod and
+job together across the metrics a query joins, and per-metric specs where a
+metric's name says too little. `scenarios.nix` documents the format; a repo
+with metrics of its own extends one with `lib.recursiveUpdate`. A machine's
+own dashboards:
+
+```nix
+legacyPackages.screenshots = inputs.homelab-monitoring.lib.screenshots.forDashboards {
+  inherit pkgs;
+  inherit (self.nixosConfigurations.nas.config.homelab.grafana) dashboards;
+  # A render with the dashboard's variables set
+  variants.workload-sonarr = {
+    dashboard = "workload";
+    variables.workload = "sonarr";
+  };
+};
+```
