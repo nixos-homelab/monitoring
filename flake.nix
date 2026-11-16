@@ -63,6 +63,8 @@
             importsApply = map (path: importApply path { inherit self inputs; });
             # Dashboard builders for homelab.grafana.dashboards
             grafana = import ./nix/lib/grafana.nix { inherit lib; };
+            # Screenshots of dashboards on generated samples, for working on their layout
+            screenshots = import ./nix/lib/screenshots { inherit self inputs lib; };
           };
           nixosModules = {
             alloy = importApply ./nix/modules/alloy { inherit self inputs; };
@@ -79,28 +81,39 @@
         perSystem =
           { pkgs, lib, ... }:
           let
+            # Every module of this flake on, with the check dashboard as the home dashboard
+            everything = {
+              homelab = {
+                alloy.enable = true;
+                grafana.enable = true;
+                mimir.enable = true;
+                node-exporter.enable = true;
+                smartctl-exporter.enable = true;
+                systemd-exporter.enable = true;
+                zfs-exporter.enable = true;
+                homepage.enable = true;
+                kube-state-metrics.enable = true;
+                # A board through every builder, as the home dashboard
+                grafana.homeDashboard = "check";
+                grafana.dashboards.check.dashboard = import ./nix/checks/dashboard.nix {
+                  inherit (self.lib) grafana;
+                };
+              };
+            };
             manifests = inputs.homelab-shared.lib.checks.manifests {
               inherit pkgs;
-              modules = lib.attrValues self.nixosModules ++ [
-                {
-                  homelab = {
-                    alloy.enable = true;
-                    grafana.enable = true;
-                    mimir.enable = true;
-                    node-exporter.enable = true;
-                    smartctl-exporter.enable = true;
-                    systemd-exporter.enable = true;
-                    zfs-exporter.enable = true;
-                    homepage.enable = true;
-                    kube-state-metrics.enable = true;
-                    # A board through every builder, as the home dashboard
-                    grafana.homeDashboard = "check";
-                    grafana.dashboards.check.dashboard = import ./nix/checks/dashboard.nix {
-                      inherit (self.lib) grafana;
-                    };
-                  };
-                }
-              ];
+              modules = lib.attrValues self.nixosModules ++ [ everything ];
+            };
+            # The same machine, for its dashboards
+            machine = inputs.nixpkgs.lib.nixosSystem {
+              modules =
+                lib.attrValues inputs.homelab-shared.nixosModules
+                ++ lib.attrValues self.nixosModules
+                ++ [
+                  inputs.homelab-shared.lib.checks.fixture
+                  { nixpkgs.hostPlatform = pkgs.stdenv.hostPlatform.system; }
+                  everything
+                ];
             };
           in
           {
@@ -110,6 +123,11 @@
               touch $out
             '';
             checks.manifests = manifests;
+            # nix build .#screenshots.<dashboard>[.<scenario>]; legacyPackages, as the renders nest
+            legacyPackages.screenshots = self.lib.screenshots.forDashboards {
+              inherit pkgs;
+              inherit (machine.config.homelab.grafana) dashboards;
+            };
             # The pinned Grafana on the payload the manifests check rendered
             checks.grafana = import ./nix/checks/grafana.nix {
               inherit pkgs;
