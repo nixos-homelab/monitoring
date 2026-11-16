@@ -195,13 +195,15 @@ in
   inherit mimirUid;
 
   # A PromQL query against Mimir. `legend` is the legend format ("{{namespace}}"); `instant` asks for the last value
-  # only, for stats, gauges and tables
+  # only, for stats, gauges and tables; `format` is the result's shape in Grafana, "table" for a row per series (`table`
+  # sets it on its queries that don't say)
   prom =
     expr:
     {
       legend ? null,
       instant ? false,
       hidden ? false,
+      format ? null,
     }:
     {
       kind = "PanelQuery";
@@ -213,7 +215,7 @@ in
           version = "v0";
           datasource.name = mimirUid;
           spec = compact {
-            inherit expr instant;
+            inherit expr instant format;
             range = !instant;
             editorMode = "code";
             legendFormat = legend;
@@ -227,8 +229,48 @@ in
   stat = panel "stat";
   gauge = panel "gauge";
   bargauge = panel "bargauge";
-  table = panel "table";
+  # Its queries as one table, a row per series with its labels as columns: Grafana makes a frame per series otherwise,
+  # and the table shows only the first. Every label is a column, so a query aggregates to the labels the table is
+  # about (`max by (namespace, deployment) (...)`), which also drops __name__ and the scrape's labels; `merge` then
+  # joins the queries' rows on those
+  table =
+    args:
+    panel "table" (
+      args
+      // {
+        queries = map (
+          q:
+          q
+          // {
+            spec = q.spec // {
+              query = q.spec.query // {
+                spec = {
+                  format = "table";
+                }
+                // q.spec.query.spec;
+              };
+            };
+          }
+        ) (args.queries or [ ]);
+      }
+    );
   stateTimeline = panel "state-timeline";
+
+  # Overrides giving a table's number columns a unit: on the whole panel it turns the label columns into NaN
+  numbersIn = unit: [
+    {
+      matcher = {
+        id = "byType";
+        options = "number";
+      };
+      properties = [
+        {
+          id = "unit";
+          value = unit;
+        }
+      ];
+    }
+  ];
 
   # Markdown, without queries
   text =
