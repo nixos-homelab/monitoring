@@ -8,6 +8,9 @@ Usage: render.py CONFIG, CONFIG a JSON file:
   init       true: only migrate Grafana's sqlite database and put it in `out`, for the renders to start from
   state      the migrated database's directory (renders)
   tsdb       a Prometheus data directory (renders)
+  mimir      {url, headers}: query this Prometheus API in place of `tsdb`, with these headers. Outside a build, for
+             a dashboard on a cluster's data: a Grafana's datasource proxy, /api/datasources/proxy/uid/mimir, with its
+             login header. `from` and `to` can then be Grafana's own ("now-6h", "now"), and the clock runs
   dashboards {name: path to the dashboard's JSON} (renders)
   variables  {name: value} for the dashboards' variables (renders)
   from, to   the time range, in Unix milliseconds (renders)
@@ -91,9 +94,10 @@ def writable_copy(src, dst):
             os.chmod(os.path.join(d, f), 0o644)
 
 
-# Prometheus on the prepared TSDB
+# Prometheus on the prepared TSDB, unless the datasource is another one
 prom_port = free_port()
-if not config.get("init"):
+live = config.get("mimir")
+if not config.get("init") and not live:
     tsdb = os.path.join(work, "tsdb")
     writable_copy(config["tsdb"], tsdb)
     with open(os.path.join(work, "prometheus.yml"), "w") as f:
@@ -117,23 +121,20 @@ dashboards_dir = os.path.join(work, "dashboards")
 for d in ("datasources", "dashboards", "plugins", "alerting"):
     os.makedirs(os.path.join(provisioning, d), exist_ok=True)
 os.makedirs(dashboards_dir, exist_ok=True)
+datasource = {
+    "name": "Mimir",
+    "uid": "mimir",
+    "type": "prometheus",
+    "access": "proxy",
+    "url": live["url"] if live else f"http://127.0.0.1:{prom_port}",
+    "jsonData": {"httpMethod": "POST", "timeInterval": "30s"},
+    "secureJsonData": {},
+}
+for i, (header, value) in enumerate((live or {}).get("headers", {}).items(), 1):
+    datasource["jsonData"][f"httpHeaderName{i}"] = header
+    datasource["secureJsonData"][f"httpHeaderValue{i}"] = value
 with open(os.path.join(provisioning, "datasources", "mimir.yaml"), "w") as f:
-    json.dump(
-        {
-            "apiVersion": 1,
-            "datasources": [
-                {
-                    "name": "Mimir",
-                    "uid": "mimir",
-                    "type": "prometheus",
-                    "access": "proxy",
-                    "url": f"http://127.0.0.1:{prom_port}",
-                    "jsonData": {"httpMethod": "POST", "timeInterval": "30s"},
-                }
-            ],
-        },
-        f,
-    )
+    json.dump({"apiVersion": 1, "datasources": [datasource]}, f)
 with open(os.path.join(provisioning, "dashboards", "homelab.yaml"), "w") as f:
     json.dump(
         {
@@ -188,7 +189,8 @@ if config.get("init"):
     shutil.copy(os.path.join(data, "grafana.db"), os.path.join(config["out"], "grafana.db"))
     sys.exit(0)
 
-wait("Prometheus", f"http://127.0.0.1:{prom_port}/-/ready")
+if not live:
+    wait("Prometheus", f"http://127.0.0.1:{prom_port}/-/ready")
 for name, uid in uids.items():
     wait(f"dashboard {name}", f"{grafana_url}/api/dashboards/uid/{uid}")
 
@@ -225,7 +227,8 @@ with sync_playwright() as p:
             color_scheme=config["theme"],
         )
         # "now" is the range's end, for every relative time the panels show ("5 minutes ago")
-        page.clock.set_fixed_time(config["to"] / 1000)
+        if isinstance(config["to"], (int, float)):
+            page.clock.set_fixed_time(config["to"] / 1000)
         messages, queries = [], []
         page.on("pageerror", lambda e: messages.append(f"page error: {e}"))
         page.on(
