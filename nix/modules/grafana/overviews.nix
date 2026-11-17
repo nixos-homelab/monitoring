@@ -18,7 +18,7 @@ in
 {
   options.homelab.grafana.overviews = lib.mkOption {
     description = ''
-      Overview dashboards from the modules' rows, each provisioned while it has rows. Its name is the dashboard's
+      Overview dashboards from the modules' panels, each provisioned while it has panels. Its name is the dashboard's
       uid; every one links to the others (tag `homelab`).
     '';
     type = lib.types.attrsOf (
@@ -35,7 +35,7 @@ in
           };
           variables = lib.mkOption {
             description = ''
-              Variables the rows use, from `lib.grafana.queryVariable`, by name: modules adding rows that filter on the
+              Variables the panels use, from `lib.grafana.queryVariable`, by name: modules adding panels that filter on the
               same variable define it alike.
             '';
             type = lib.types.attrsOf (lib.types.attrsOf lib.types.anything);
@@ -83,25 +83,6 @@ in
             );
             default = { };
           };
-          rows = lib.mkOption {
-            description = "Rows under the panels: `row` from `lib.grafana.row`, `order` lower first. Prefer `panels`.";
-            type = lib.types.attrsOf (
-              lib.types.submodule {
-                options = {
-                  row = lib.mkOption {
-                    description = "The row, from `lib.grafana.row`.";
-                    type = lib.types.attrsOf lib.types.anything;
-                  };
-                  order = lib.mkOption {
-                    description = "Where the row goes, lower first.";
-                    type = lib.types.int;
-                    default = 500;
-                  };
-                };
-              }
-            );
-            default = { };
-          };
         };
       }
     );
@@ -127,25 +108,13 @@ in
           let
             sorted = byOrder o.panels;
             tiles = g.strip { } (lib.filter (p: p.order < 100) sorted);
-            grid = {
-              kind = "GridLayout";
-              spec.items =
-                tiles.items ++ (g.packBelow tiles.y (lib.filter (p: p.order >= 100) sorted)).spec.items;
-            };
           in
-          if o.rows == { } then
-            grid
-          else
-            g.rows (
-              lib.optional (o.panels != { }) (
-                g.row {
-                  title = o.title;
-                  hideHeader = true;
-                } grid
-              )
-              ++ map (r: r.row) (byOrder o.rows)
-            );
+          {
+            kind = "GridLayout";
+            spec.items =
+              tiles.items ++ (g.packBelow tiles.y (lib.filter (p: p.order >= 100) sorted)).spec.items;
+          };
       };
-    }) (lib.filterAttrs (_: o: o.panels != { } || o.rows != { }) cfg);
+    }) (lib.filterAttrs (_: o: o.panels != { }) cfg);
   };
 }
