@@ -129,8 +129,13 @@ def collect(node, context, in_counter_func):
     if t == "binaryExpr":
         matching = node.get("matching") or {}
         extra = set(matching.get("labels") or []) | set(matching.get("include") or []) if matching.get("on") else set()
-        collect(node.get("lhs"), context | extra, in_counter_func)
-        collect(node.get("rhs"), context | extra, in_counter_func)
+        # The "one" side of group_left/group_right is an info metric: it has the matching and the copied labels, not
+        # those the rest of the query groups or labels its legend by
+        card = matching.get("card")
+        lhs = extra if card == "one-to-many" else context | extra
+        rhs = extra if card == "many-to-one" else context | extra
+        collect(node.get("lhs"), lhs, in_counter_func)
+        collect(node.get("rhs"), rhs, in_counter_func)
         return
     if t == "call":
         counter = node.get("func", {}).get("name") in COUNTER_FUNCS

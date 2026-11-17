@@ -69,7 +69,15 @@ in
           ];
           usage_stats.enabled = false;
           activity_tracker.filepath = "/data/metrics-activity.log";
-          limits.compactor_blocks_retention_period = cfg.retention;
+          limits = {
+            compactor_blocks_retention_period = cfg.retention;
+            # Sharding splits each query 16 ways for queriers to share; on one node it only multiplies the requests,
+            # and a dashboard's 40-odd queries at once ran into the scheduler's queue below
+            query_sharding_total_shards = 0;
+          };
+          # A dashboard opened on a tall screen asks for every panel at once: 100 queued per tenant answered the rest
+          # with 429
+          query_scheduler.max_outstanding_requests_per_tenant = 1000;
           distributor = {
             ring.kvstore.store = "inmemory";
             pool.health_check_ingesters = true;

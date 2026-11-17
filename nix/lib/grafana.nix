@@ -96,6 +96,166 @@ let
         inherit node;
       };
 
+  # What a panel of a plugin looks like unless it says otherwise: stats small with a sparkline of their range, time
+  # series with a multi-series tooltip, bar gauges horizontal with their names readable on the left
+  defaultOptions = {
+    stat = {
+      graphMode = "area";
+      colorMode = "value";
+      justifyMode = "auto";
+      textMode = "auto";
+      wideLayout = true;
+      showPercentChange = false;
+      orientation = "auto";
+      text = {
+        titleSize = 12;
+        valueSize = 22;
+      };
+      reduceOptions = {
+        calcs = [ "lastNotNull" ];
+        fields = "";
+        values = false;
+      };
+    };
+    timeseries = {
+      legend = legends.bottom;
+      tooltip = {
+        mode = "multi";
+        sort = "desc";
+      };
+    };
+    bargauge = {
+      displayMode = "gradient";
+      orientation = "horizontal";
+      namePlacement = "left";
+      showUnfilled = true;
+      valueMode = "color";
+      sizing = "manual";
+      minVizHeight = 14;
+      maxVizHeight = 20;
+      minVizWidth = 8;
+      reduceOptions = {
+        calcs = [ "lastNotNull" ];
+        fields = "";
+        values = false;
+      };
+    };
+    gauge = {
+      showThresholdMarkers = true;
+      showThresholdLabels = false;
+      reduceOptions = {
+        calcs = [ "lastNotNull" ];
+        fields = "";
+        values = false;
+      };
+    };
+    state-timeline = {
+      showValue = "never";
+      mergeValues = true;
+      rowHeight = 0.8;
+      alignValue = "left";
+      legend = legends.hidden;
+      tooltip = {
+        mode = "single";
+        sort = "none";
+      };
+    };
+    table = {
+      showHeader = true;
+      cellHeight = "sm";
+    };
+    status-history = {
+      showValue = "never";
+      rowHeight = 0.85;
+      colWidth = 0.9;
+      legend = legends.hidden;
+      tooltip = {
+        mode = "single";
+        sort = "none";
+      };
+    };
+    piechart = {
+      pieType = "donut";
+      displayLabels = [ ];
+      legend = {
+        displayMode = "table";
+        placement = "right";
+        showLegend = true;
+        values = [
+          "value"
+          "percent"
+        ];
+      };
+      tooltip = {
+        mode = "single";
+        sort = "none";
+      };
+      reduceOptions = {
+        calcs = [ "lastNotNull" ];
+        fields = "";
+        values = false;
+      };
+    };
+  };
+  # Panels coloured by their thresholds rather than a palette: each cell or bar shows its level
+  defaultColor = {
+    status-history.mode = "thresholds";
+    state-timeline.mode = "thresholds";
+  };
+  defaultCustom = {
+    timeseries = {
+      lineWidth = 1;
+      fillOpacity = 12;
+      gradientMode = "opacity";
+      showPoints = "never";
+      # A gap of up to 5 minutes is drawn through: a scrape missed now and then isn't news
+      spanNulls = 300000;
+    };
+  };
+  # Where a time series' legend goes: under it as a list, or as a table with the series' mean and max, to the right
+  # (many series) or under it (long names)
+  legends = {
+    bottom = {
+      displayMode = "list";
+      placement = "bottom";
+      showLegend = true;
+      calcs = [ ];
+    };
+    right = {
+      displayMode = "table";
+      placement = "right";
+      showLegend = true;
+      calcs = [
+        "mean"
+        "max"
+      ];
+      width = 280;
+    };
+    table = {
+      displayMode = "table";
+      placement = "bottom";
+      showLegend = true;
+      calcs = [
+        "mean"
+        "max"
+      ];
+    };
+    hidden = {
+      displayMode = "list";
+      placement = "bottom";
+      showLegend = false;
+      calcs = [ ];
+    };
+  };
+  # The colours: green only for a healthy state, orange for one that wants a look, red for one that is broken or
+  # past a critical line. A value with nothing good or bad about it (traffic, sizes, counts) is neutral
+  neutral = [
+    {
+      value = null;
+      color = "text";
+    }
+  ];
+
   # A visualization panel. `type` is the panel plugin (timeseries, stat, ...); the rest goes to the panel's
   # VizConfig and query group
   panel =
@@ -108,8 +268,13 @@ let
       min ? null,
       max ? null,
       decimals ? null,
-      # [ { value = null; color = "green"; } { value = 80; color = "red"; } ], the first value null (from -Infinity)
+      # [ { value = null; color = "green"; } { value = 80; color = "red"; } ], the first value null (from -Infinity).
+      # Neither this nor `levels`: neutral
       thresholds ? null,
+      # `levels { warn; crit; }`: the panel's colours (stats, gauges, tables) or its bands (time series), alike
+      levels ? null,
+      # A time series' legend: an attrset of `legends`, or its name ("bottom", "right", "table", "hidden")
+      legend ? null,
       mappings ? null,
       color ? null,
       noValue ? null,
@@ -128,6 +293,33 @@ let
       transformations ? [ ],
       transparent ? null,
     }:
+    let
+      banded =
+        levels != null
+        && builtins.elem type [
+          "timeseries"
+          "state-timeline"
+        ];
+      steps =
+        if thresholds != null then
+          thresholds
+        else if levels == null then
+          neutral
+        else if banded then
+          levels.bands
+        else
+          levels.steps;
+      legendOptions = lib.optionalAttrs (legend != null) {
+        legend = if builtins.isString legend then legends.${legend} else legend;
+      };
+      custom' =
+        let
+          merged = lib.recursiveUpdate (defaultCustom.${type} or { }) (
+            if custom == null then { } else custom
+          );
+        in
+        lib.recursiveUpdate merged (lib.optionalAttrs banded { thresholdsStyle.mode = "dashed+area"; });
+    in
     {
       _panel = id: {
         kind = "Panel";
@@ -159,7 +351,8 @@ let
             group = type;
             version = "";
             spec = {
-              inherit options;
+              options = lib.recursiveUpdate (lib.recursiveUpdate (defaultOptions.${type} or { }
+              ) legendOptions) options;
               fieldConfig = {
                 defaults = compact {
                   inherit
@@ -168,19 +361,15 @@ let
                     max
                     decimals
                     mappings
-                    color
                     noValue
-                    custom
                     ;
+                  color = if color != null then color else defaultColor.${type} or null;
+                  custom = if custom' == { } then null else custom';
                   links = fieldLinks;
-                  thresholds =
-                    if thresholds == null then
-                      null
-                    else
-                      {
-                        mode = "absolute";
-                        steps = thresholds;
-                      };
+                  thresholds = {
+                    mode = "absolute";
+                    inherit steps;
+                  };
                 };
                 inherit overrides;
               };
@@ -190,9 +379,124 @@ let
         };
       };
     };
+  # `pack`, below the first `top` grid rows
+  packBelow =
+    top: items:
+    let
+      place =
+        acc: item:
+        let
+          w = lib.min 24 item.w;
+          tops = map (x: {
+            inherit x;
+            y = lib.foldl' lib.max 0 (lib.sublist x w acc.heights);
+          }) (lib.range 0 (24 - w));
+          best = lib.foldl' (b: c: if c.y < b.y then c else b) (lib.head tops) tops;
+        in
+        {
+          heights = lib.imap0 (
+            i: h: if i >= best.x && i < best.x + w then best.y + item.h else h
+          ) acc.heights;
+          items = acc.items ++ [
+            {
+              kind = "GridLayoutItem";
+              spec = {
+                inherit (best) x y;
+                width = w;
+                height = item.h;
+                element = item.panel;
+              };
+            }
+          ];
+        };
+    in
+    {
+      kind = "GridLayout";
+      spec.items =
+        (lib.foldl' place {
+          heights = lib.genList (_: top) 24;
+          items = [ ];
+        } items).items;
+    };
+
 in
 {
-  inherit mimirUid;
+  inherit mimirUid legends;
+
+  # A value's levels: `warn` and `crit` where it turns orange and red, upwards (`below = true`: downwards, for a
+  # value that is bad when low). One set gives a stat or gauge its colours, green below `warn`, and a time series its
+  # bands past `warn` and `crit`; an alert rule can take the same numbers
+  levels =
+    {
+      warn,
+      crit,
+      below ? false,
+    }:
+    {
+      inherit warn crit below;
+      steps =
+        if below then
+          [
+            {
+              value = null;
+              color = "red";
+            }
+            {
+              value = crit;
+              color = "orange";
+            }
+            {
+              value = warn;
+              color = "green";
+            }
+          ]
+        else
+          [
+            {
+              value = null;
+              color = "green";
+            }
+            {
+              value = warn;
+              color = "orange";
+            }
+            {
+              value = crit;
+              color = "red";
+            }
+          ];
+      bands =
+        if below then
+          [
+            {
+              value = null;
+              color = "red";
+            }
+            {
+              value = crit;
+              color = "orange";
+            }
+            {
+              value = warn;
+              color = "transparent";
+            }
+          ]
+        else
+          [
+            {
+              value = null;
+              color = "transparent";
+            }
+            {
+              value = warn;
+              color = "orange";
+            }
+            {
+              value = crit;
+              color = "red";
+            }
+          ];
+    };
 
   # A PromQL query against Mimir. `legend` is the legend format ("{{namespace}}"); `instant` asks for the last value
   # only, for stats, gauges and tables; `format` is the result's shape in Grafana, "table" for a row per series (`table`
@@ -255,6 +559,83 @@ in
       }
     );
   stateTimeline = panel "state-timeline";
+  statusHistory = panel "status-history";
+  piechart = panel "piechart";
+  barchart = panel "barchart";
+  heatmap = panel "heatmap";
+
+  # A table column's look, as an override of the field it shows: its unit, its levels or thresholds, value mappings,
+  # how the cell shows them ("color-text", "color-background", "gauge"), its width and its header's tooltip
+  column =
+    name:
+    {
+      unit ? null,
+      decimals ? null,
+      levels ? null,
+      thresholds ? null,
+      mappings ? null,
+      display ? null,
+      width ? null,
+      description ? null,
+    }:
+    {
+      matcher = {
+        id = "byName";
+        options = name;
+      };
+      properties = lib.filter (p: p.value != null) [
+        {
+          id = "unit";
+          value = unit;
+        }
+        {
+          id = "decimals";
+          value = decimals;
+        }
+        {
+          id = "thresholds";
+          value =
+            if thresholds != null then
+              {
+                mode = "absolute";
+                steps = thresholds;
+              }
+            else if levels != null then
+              {
+                mode = "absolute";
+                inherit (levels) steps;
+              }
+            else
+              null;
+        }
+        {
+          id = "mappings";
+          value = mappings;
+        }
+        {
+          id = "custom.cellOptions";
+          value =
+            if display == null then
+              null
+            else if display == "gauge" then
+              {
+                type = "gauge";
+                mode = "basic";
+                valueDisplayMode = "text";
+              }
+            else
+              { type = display; };
+        }
+        {
+          id = "custom.width";
+          value = width;
+        }
+        {
+          id = "description";
+          value = description;
+        }
+      ];
+    };
 
   # Overrides giving a table's number columns a unit: on the whole panel it turns the label columns into NaN
   numbersIn = unit: [
@@ -271,6 +652,147 @@ in
       ];
     }
   ];
+
+  # "17/18": how many of a set are good, as a fraction, coloured by the share that is. `good` and `all` are PromQL
+  # giving one series each (sum(...), count(...)); count_values turns their numbers into the labels the legend shows
+  ratio =
+    {
+      title,
+      good,
+      all,
+      description ? null,
+      # Below `warn` is orange, below `crit` red
+      warn ? 1,
+      crit ? 0.5,
+      links ? [ ],
+      fieldLinks ? null,
+    }:
+    panel "stat" {
+      inherit
+        title
+        description
+        links
+        fieldLinks
+        ;
+      unit = "percentunit";
+      thresholds = [
+        {
+          value = null;
+          color = "red";
+        }
+        {
+          value = crit;
+          color = "orange";
+        }
+        {
+          value = warn;
+          color = "green";
+        }
+      ];
+      queries = [
+        {
+          kind = "PanelQuery";
+          spec = {
+            hidden = false;
+            query = {
+              kind = "DataQuery";
+              group = "prometheus";
+              version = "v0";
+              datasource.name = mimirUid;
+              spec = {
+                expr = "(((${good}) or vector(0)) / (${all})) * on () group_left (good, all) (count_values(\"good\", (${good}) or vector(0)) * on () group_left (all) count_values(\"all\", (${all})))";
+                instant = true;
+                range = false;
+                editorMode = "code";
+                legendFormat = "{{good}}/{{all}}";
+              };
+            };
+          };
+        }
+      ];
+      options = {
+        textMode = "name";
+        graphMode = "none";
+      };
+    };
+
+  # Panels packed onto Grafana's 24-column grid in order, each where it sits highest, leftmost on a tie, as
+  # Grafana itself compacts a dashboard: [ { panel; w; h; } ]
+  pack = packBelow 0;
+
+  inherit packBelow;
+
+  # Tiles in strips of up to `perRow`, the tiles of a strip sharing its 24 columns, the last tile taking what's left:
+  # [ { panel; h; } ]. Returns the items and the height of the strips, for packing more below them
+  strip =
+    {
+      perRow ? 8,
+    }:
+    tiles:
+    let
+      rows = lib.genList (i: lib.sublist (i * perRow) perRow tiles) (
+        (lib.length tiles + perRow - 1) / perRow
+      );
+      placeRow =
+        acc: row:
+        let
+          n = lib.length row;
+          w = 24 / n;
+          h = lib.foldl' (m: t: lib.max m t.h) 0 row;
+        in
+        {
+          y = acc.y + h;
+          items =
+            acc.items
+            ++ lib.imap0 (i: t: {
+              kind = "GridLayoutItem";
+              spec = {
+                x = i * w;
+                inherit (acc) y;
+                width = if i == n - 1 then 24 - i * w else w;
+                height = h;
+                element = t.panel;
+              };
+            }) row;
+        };
+    in
+    lib.foldl' placeRow {
+      y = 0;
+      items = [ ];
+    } rows;
+
+  # A query whose series mark moments on the dashboard's time series: a vertical line where it has a value, the
+  # series' labels in the hover text
+  annotation =
+    {
+      name,
+      expr,
+      color ? "orange",
+      title ? name,
+      text ? null,
+    }:
+    {
+      kind = "AnnotationQuery";
+      spec = {
+        inherit name;
+        enable = true;
+        hide = false;
+        iconColor = color;
+        query = {
+          kind = "DataQuery";
+          group = "prometheus";
+          version = "v0";
+          datasource.name = mimirUid;
+          spec = compact {
+            inherit expr;
+            refId = "Anno";
+            titleFormat = title;
+            textFormat = text;
+            step = "60s";
+          };
+        };
+      };
+    };
 
   # Markdown, without queries
   text =
@@ -516,6 +1038,8 @@ in
       to ? "now",
       refresh ? "1m",
       cursorSync ? "Crosshair",
+      # From `annotation`
+      annotations ? [ ],
     }:
     let
       lifted = lift 1 layout;
@@ -533,7 +1057,7 @@ in
           links
           cursorSync
           ;
-        annotations = [ ];
+        inherit annotations;
         editable = false;
         preload = false;
         elements = lifted.elements;

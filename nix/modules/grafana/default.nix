@@ -71,6 +71,39 @@ in
         }
       '';
     };
+    signals = lib.mkOption {
+      description = ''
+        Metrics one module provides and other modules' panels use, by what they mean rather than where they come
+        from: a function from a PromQL label selector (`node="$node"`, or "") to the query, null while no module
+        provides it. A panel that combines with one checks it isn't null, so it doesn't need to know which module or
+        exporter is behind it.
+      '';
+      type = lib.types.submodule {
+        options = {
+          diskInfo = lib.mkOption {
+            description = "One series of value 1 per disk, with its `device` and `model_name` labels.";
+            type = lib.types.nullOr (lib.types.functionTo lib.types.str);
+            default = null;
+          };
+          allocatable = lib.mkOption {
+            description = "What the nodes can allocate to pods, of a resource (`cpu` in cores, `memory` in bytes), as one series; the selector is the resource.";
+            type = lib.types.nullOr (lib.types.functionTo lib.types.str);
+            default = null;
+          };
+          requests = lib.mkOption {
+            description = "What the containers matching the selector request of a resource together: `sel: resource: ...`.";
+            type = lib.types.nullOr (lib.types.functionTo (lib.types.functionTo lib.types.str));
+            default = null;
+          };
+          limits = lib.mkOption {
+            description = "The containers' limits of a resource together, as `requests`.";
+            type = lib.types.nullOr (lib.types.functionTo (lib.types.functionTo lib.types.str));
+            default = null;
+          };
+        };
+      };
+      default = { };
+    };
     homeDashboard = lib.mkOption {
       description = ''
         The dashboard of `homelab.grafana.dashboards` Grafana opens on, in place of its own home page.

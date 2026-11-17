@@ -104,12 +104,41 @@ let
         }
       ];
       workload = workloadRows ++ systemRows;
-      disk = map (device: { inherit device; }) [
-        "nvme0n1"
-        "sda"
-        "sdb"
-        "sdc"
-        "sdd"
+      disk = [
+        {
+          device = "nvme0n1";
+          model_name = "Samsung SSD 980 PRO 1TB";
+        }
+        {
+          device = "sda";
+          model_name = "ST16000NM001G-2KK103";
+        }
+        {
+          device = "sdb";
+          model_name = "ST16000NM001G-2KK103";
+        }
+        {
+          device = "sdc";
+          model_name = "ST16000NM002H-3KW133";
+        }
+        {
+          device = "sdd";
+          model_name = "ST18000NM000J-2TV103";
+        }
+      ];
+      chip = [
+        {
+          chip = "pci0000:00_0000:00:18_3";
+          chip_name = "k10temp";
+        }
+        {
+          chip = "platform_it87_2608";
+          chip_name = "it8622";
+        }
+        {
+          chip = "nvme_nvme0";
+          chip_name = "nvme";
+        }
       ];
       pool = [
         { pool = "rpool"; }
@@ -211,6 +240,7 @@ let
         2.5
       ];
       node_hwmon_temp_celsius = {
+        "with" = [ "chip" ];
         labels.sensor = [
           "temp1"
           "temp2"
@@ -218,6 +248,83 @@ let
         range = [
           42
           58
+        ];
+      };
+      node_hwmon_chip_names = {
+        "with" = [
+          "chip"
+          "chip_name"
+        ];
+        value = 1;
+      };
+      node_hwmon_fan_rpm = {
+        "with" = [ "chip" ];
+        labels.sensor = [ "fan1" ];
+        range = [
+          900
+          1400
+        ];
+        where = [
+          {
+            match.chip = "nvme_nvme0";
+            absent = true;
+          }
+          {
+            match.chip = "pci0000:00_0000:00:18_3";
+            absent = true;
+          }
+        ];
+      };
+      node_vmstat_oom_kill = {
+        counter = true;
+        rate = 0;
+      };
+      node_timex_offset_seconds.range = [
+        (-0.0004)
+        0.0004
+      ];
+      node_nf_conntrack_entries.range = [
+        800
+        2400
+      ];
+      node_nf_conntrack_entries_limit.value = 262144;
+      node_network_speed_bytes = {
+        labels.device = [ "enp3s0" ];
+        value = 125000000;
+      };
+      smartctl_device = {
+        "with" = [
+          "device"
+          "model_name"
+        ];
+        value = 1;
+      };
+      smartctl_device_capacity_bytes = {
+        "with" = [ "device" ];
+        value = 16.0e12;
+        where = [
+          {
+            match.device = "nvme0n1";
+            value = 1.0e12;
+          }
+        ];
+      };
+      smartctl_device_attribute = {
+        "with" = [ "device" ];
+        labels.attribute_value_type = [ "raw" ];
+        value = 0;
+        where = [
+          {
+            match.device = "nvme0n1";
+            absent = true;
+          }
+        ];
+      };
+      systemd_unit_active_exit_time_seconds = {
+        labels.name = units.active ++ units.inactive;
+        fromEnd = [
+          (-20000)
+          (-600)
         ];
       };
       node_pressure_cpu_waiting_seconds_total.rate = [
@@ -726,6 +833,19 @@ let
           absent = true;
         }
       ];
+      smartctl_device_attribute.where = [
+        {
+          match.device = "nvme0n1";
+          absent = true;
+        }
+        {
+          match = {
+            device = "sdc";
+            attribute_name = "Reallocated_Sector_Ct";
+          };
+          value = 8;
+        }
+      ];
       smartctl_device_error_log_count.where = [
         {
           match.device = "sdc";
@@ -826,7 +946,7 @@ let
       ];
       kube_job_failed = {
         absent = false;
-        labels.job_name = [ "immich-db-dump-29401880" ];
+        labels.job_name = [ "imap-backup-29401860" ];
         labels.condition = [ "true" ];
         value = 1;
       };
