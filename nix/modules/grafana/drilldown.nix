@@ -136,7 +136,6 @@ in
               panel = g.timeseries {
                 title = "CPU";
                 description = "Each pod's CPU use in cores${lib.optionalString bounds "; dashed, the containers' requests (what the scheduler sets aside) and limits (where they're throttled) together"}";
-                decimals = 2;
                 custom.axisLabel = "cores";
                 queries = [
                   (g.prom
