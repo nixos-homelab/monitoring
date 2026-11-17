@@ -1,1 +1,1 @@
-FROM grafana/mimir:3.2.4@sha256:e4ff85d922c7c0a5131576d2659a1b98b3abfd73c92448dccf8ad3a6049a7ed8
+FROM grafana/mimir:3.2.5@sha256:245ce851e2f5d27db6bd37720d9ab12bcb017f4b4e20340d9b58266435dbe4b6
