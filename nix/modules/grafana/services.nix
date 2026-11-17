@@ -21,67 +21,52 @@ in
     homelab.grafana.home.tiles.endpoints = {
       group = "Workloads";
       order = 202;
-      panel = g.stat {
-        title = "Metrics endpoints";
-        decimals = 0;
+      panel = g.ratio {
+        title = "Endpoints up";
+        description = "Metrics endpoints Alloy scraped at its last try, of all it scrapes";
+        good = "sum(up)";
+        all = "count(up)";
         links = [
           {
             title = "Services";
             url = "/d/services/services?\${__url_time_range}";
           }
         ];
-        queries = [
-          (g.prom "sum(up)" {
-            instant = true;
-            legend = "up";
-          })
-          (g.prom "count(up)" {
-            instant = true;
-            legend = "scraped";
-          })
-        ];
       };
     };
     homelab.grafana.overviews.services = {
       title = "Services";
-      description = "Every workload and metrics endpoint, up or down; a value opens its workload";
-      rows.endpoints = {
-        order = 200;
-        row = g.row { title = "Metrics endpoints"; } (
-          g.autoGrid { columns = 1; } [
-            (g.stat {
-              title = "Up";
-              description = "Every endpoint Alloy scrapes";
-              queries = [
-                (g.prom "min by (namespace, job) (up)" {
-                  instant = true;
-                  legend = "{{job}}";
-                })
-              ];
-              mappings = [
-                {
-                  type = "value";
-                  options = {
-                    "0" = {
-                      text = "Down";
-                      color = "red";
-                    };
-                    "1" = {
-                      text = "Up";
-                      color = "green";
-                    };
-                  };
-                }
-              ];
-              options = {
-                colorMode = "background";
-                textMode = "name";
-                justifyMode = "center";
-              };
-              fieldLinks = toWorkload;
-            })
-          ]
-        );
+      description = "Every workload and metrics endpoint, available or not, over time; a row opens its workload";
+      panels = {
+        endpoints = {
+          order = 11;
+          w = 6;
+          h = 4;
+          panel = g.ratio {
+            title = "Endpoints up";
+            description = "Metrics endpoints Alloy scraped at its last try, of all it scrapes";
+            good = "sum(up)";
+            all = "count(up)";
+          };
+        };
+        up = {
+          order = 111;
+          w = 12;
+          h = 14;
+          panel = g.statusHistory {
+            title = "Endpoints";
+            description = "Each metrics endpoint Alloy scrapes, by job, over time: green while every target answered, orange while some did, red while none. Click a row for its workload";
+            unit = "percentunit";
+            levels = g.levels {
+              warn = 1;
+              crit = 0.5;
+              below = true;
+            };
+            fieldLinks = toWorkload;
+            queryOptions.maxDataPoints = 60;
+            queries = [ (g.prom "avg by (namespace, job) (up)" { legend = "{{job}}"; }) ];
+          };
+        };
       };
     };
   };

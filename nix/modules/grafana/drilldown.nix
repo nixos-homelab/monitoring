@@ -10,6 +10,44 @@ let
   cfg = config.homelab.grafana.drilldown;
   g = self.lib.grafana;
   w = ''namespace="$workload"'';
+  inherit (config.homelab.grafana.signals) requests limits;
+  bounds = requests != null && limits != null;
+  # Requests and limits dashed and neutral, so the pods' own lines stand out against them
+  limitStyle =
+    map
+      (name: {
+        matcher = {
+          id = "byName";
+          options = name;
+        };
+        properties = [
+          {
+            id = "custom.lineStyle";
+            value = {
+              fill = "dash";
+              dash = [
+                8
+                6
+              ];
+            };
+          }
+          {
+            id = "custom.fillOpacity";
+            value = 0;
+          }
+          {
+            id = "color";
+            value = {
+              mode = "fixed";
+              fixedColor = if name == "limit" then "red" else "text";
+            };
+          }
+        ];
+      })
+      [
+        "requested"
+        "limit"
+      ];
 in
 {
   options.homelab.grafana.drilldown.rows = lib.mkOption {
@@ -49,109 +87,137 @@ in
       targets = {
         order = 100;
         row = g.row { title = "Scrape targets"; } (
-          g.autoGrid { columns = 4; } [
-            (g.stat {
-              title = "Up";
-              description = "Each metrics endpoint Alloy scrapes in the workload's namespace";
-              queries = [
-                (g.prom "up{${w}}" {
-                  instant = true;
-                  legend = "{{job}} {{pod}}";
-                })
-              ];
-              mappings = [
-                {
-                  type = "value";
-                  options = {
-                    "0" = {
-                      text = "Down";
-                      color = "red";
+          g.pack [
+            {
+              w = 4;
+              h = 5;
+              panel = g.ratio {
+                title = "Targets up";
+                description = "The workload's metrics endpoints Alloy scraped at its last try, of all it scrapes in the namespace";
+                good = "sum(up{${w}})";
+                all = "count(up{${w}})";
+              };
+            }
+            {
+              w = 20;
+              h = 5;
+              panel = g.statusHistory {
+                title = "Targets";
+                description = "Each endpoint over time: green while it answered Alloy's scrapes, red while it didn't";
+                levels = g.levels {
+                  warn = 1;
+                  crit = 0.5;
+                  below = true;
+                };
+                noValue = "No metrics endpoints";
+                queryOptions.maxDataPoints = 80;
+                queries = [ (g.prom "up{${w}}" { legend = "{{pod}}"; }) ];
+                mappings = [
+                  {
+                    type = "value";
+                    options = {
+                      "0".text = "down";
+                      "1".text = "up";
                     };
-                    "1" = {
-                      text = "Up";
-                      color = "green";
-                    };
-                  };
-                }
-              ];
-              noValue = "No metrics";
-            })
+                  }
+                ];
+              };
+            }
           ]
         );
       };
       resources = {
         order = 120;
         row = g.row { title = "Resources"; } (
-          g.autoGrid { columns = 3; } [
-            (g.timeseries {
-              title = "CPU";
-              unit = "suffix: cores";
-              queries = [
-                (g.prom
-                  ''sum by (pod) (rate(container_cpu_usage_seconds_total{${w}, container!=""}[$__rate_interval]))''
-                  {
+          g.pack [
+            {
+              w = 8;
+              h = 8;
+              panel = g.timeseries {
+                title = "CPU";
+                description = "Each pod's CPU use in cores${lib.optionalString bounds "; dashed, the containers' requests (what the scheduler sets aside) and limits (where they're throttled) together"}";
+                decimals = 2;
+                custom.axisLabel = "cores";
+                queries = [
+                  (g.prom
+                    ''sum by (pod) (rate(container_cpu_usage_seconds_total{${w}, container!=""}[$__rate_interval]))''
+                    {
+                      legend = "{{pod}}";
+                    }
+                  )
+                ]
+                ++ lib.optionals bounds [
+                  (g.prom (requests w "cpu") { legend = "requested"; })
+                  (g.prom (limits w "cpu") { legend = "limit"; })
+                ];
+                overrides = limitStyle;
+              };
+            }
+            {
+              w = 8;
+              h = 8;
+              panel = g.timeseries {
+                title = "Memory";
+                description = "Each pod's working set (what it can't give back)${lib.optionalString bounds "; dashed, the containers' requests and limits together: past its limit a container is OOM-killed"}";
+                unit = "bytes";
+                queries = [
+                  (g.prom ''sum by (pod) (container_memory_working_set_bytes{${w}, container!=""})'' {
                     legend = "{{pod}}";
-                  }
-                )
-              ];
-            })
-            (g.timeseries {
-              title = "Memory";
-              unit = "bytes";
-              queries = [
-                (g.prom ''sum by (pod) (container_memory_working_set_bytes{${w}, container!=""})'' {
-                  legend = "{{pod}}";
-                })
-              ];
-            })
-            (g.timeseries {
-              title = "Network";
-              unit = "Bps";
-              description = "Received above the line, sent below";
-              queries = [
-                (g.prom "sum by (pod) (rate(container_network_receive_bytes_total{${w}}[$__rate_interval]))" {
-                  legend = "{{pod}} in";
-                })
-                (g.prom "-sum by (pod) (rate(container_network_transmit_bytes_total{${w}}[$__rate_interval]))" {
-                  legend = "{{pod}} out";
-                })
-              ];
-            })
+                  })
+                ]
+                ++ lib.optionals bounds [
+                  (g.prom (requests w "memory") { legend = "requested"; })
+                  (g.prom (limits w "memory") { legend = "limit"; })
+                ];
+                overrides = limitStyle;
+              };
+            }
+            {
+              w = 8;
+              h = 8;
+              panel = g.timeseries {
+                title = "Network";
+                unit = "Bps";
+                description = "Each pod's traffic: received above the line, sent below";
+                queries = [
+                  (g.prom "sum by (pod) (rate(container_network_receive_bytes_total{${w}}[$__rate_interval]))" {
+                    legend = "{{pod}} in";
+                  })
+                  (g.prom "-sum by (pod) (rate(container_network_transmit_bytes_total{${w}}[$__rate_interval]))" {
+                    legend = "{{pod}} out";
+                  })
+                ];
+              };
+            }
           ]
         );
       };
       volumes = {
         order = 130;
         row = g.row { title = "Volumes"; } (
-          g.autoGrid { columns = 2; } [
-            (g.bargauge {
-              title = "Used";
-              unit = "percentunit";
-              min = 0;
-              max = 1;
-              description = "The filesystem of each persistent volume claim the kubelet reports; claims on one dataset share its numbers. NFS volumes have none";
-              queries = [
-                (g.prom "kubelet_volume_stats_used_bytes{${w}} / kubelet_volume_stats_capacity_bytes{${w}}" {
-                  instant = true;
-                  legend = "{{persistentvolumeclaim}}";
-                })
-              ];
-              thresholds = [
-                {
-                  value = null;
-                  color = "green";
-                }
-                {
-                  value = 0.8;
-                  color = "orange";
-                }
-                {
-                  value = 0.9;
-                  color = "red";
-                }
-              ];
-              noValue = "No volume stats";
-            })
+          g.pack [
+            {
+              w = 12;
+              h = 5;
+              panel = g.bargauge {
+                title = "Used";
+                description = "The filesystem of each persistent volume claim the kubelet reports; claims on one dataset share its numbers. NFS volumes have none. Orange from 80 %, red from 90 %";
+                unit = "percentunit";
+                min = 0;
+                max = 1;
+                levels = g.levels {
+                  warn = 0.8;
+                  crit = 0.9;
+                };
+                noValue = "No volume stats";
+                queries = [
+                  (g.prom "kubelet_volume_stats_used_bytes{${w}} / kubelet_volume_stats_capacity_bytes{${w}}" {
+                    instant = true;
+                    legend = "{{persistentvolumeclaim}}";
+                  })
+                ];
+              };
+            }
           ]
         );
       };
