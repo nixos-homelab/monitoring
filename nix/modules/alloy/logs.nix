@@ -420,12 +420,14 @@ let
           lib.types.submodule {
             options = {
               kind = lib.mkOption {
+                description = "How the key-value pairs are written.";
                 type = lib.types.enum [
                   "logfmt"
                   "json"
                 ];
               };
               source = lib.mkOption {
+                description = "The extracted value that holds them, or null for the whole line.";
                 type = lib.types.nullOr lib.types.str;
                 default = null;
               };
