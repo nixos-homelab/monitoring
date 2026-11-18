@@ -123,6 +123,7 @@ let
 in
 {
   key = "${toString __curPos.file}#modules.nixos.alloy";
+  imports = self.lib.importsApply [ ./logs.nix ];
   options.homelab.alloy = {
     enable = lib.mkEnableOption "alloy";
     allowEgress = lib.mkOption {
@@ -190,7 +191,10 @@ in
               namespaces.alloy.metadata.namespace = null;
               configMaps.alloy = {
                 metadata = { inherit labels; };
-                data."alloy-config.alloy" = builtins.readFile ./alloy-config.alloy + nodeTargetsConfig;
+                data."alloy-config.alloy" =
+                  builtins.readFile ./alloy-config.alloy
+                  + nodeTargetsConfig
+                  + lib.optionalString cfg.logs.enable (cfg.logs.sources + cfg.logs.pipeline);
               };
               # In Alloy's namespace, each selecting its Services' namespace: they exist only while Alloy does
               serviceMonitors = lib.mapAttrs (_: m: {
@@ -335,8 +339,20 @@ in
                       initialDelaySeconds = 10;
                       timeoutSeconds = 1;
                     };
-                    volumeMounts."/etc/alloy".name = "config";
-                    volumeMounts."/data".name = "data";
+                    volumeMounts = {
+                      "/etc/alloy".name = "config";
+                      "/data".name = "data";
+                    }
+                    // lib.optionalAttrs cfg.logs.enable {
+                      "/var/log/journal" = {
+                        name = "journal";
+                        readOnly = true;
+                      };
+                      "/etc/machine-id" = {
+                        name = "machine-id";
+                        readOnly = true;
+                      };
+                    };
                   };
                 };
                 config.kubernetes.resources.daemonSets.alloy.spec = {
@@ -354,8 +370,25 @@ in
                       ];
                       volumeMounts."/etc/alloy".name = "config";
                     };
-                    volumes.config.configMap.name = "alloy";
-                    volumes.data.persistentVolumeClaim.claimName = "alloy";
+                    volumes = {
+                      config.configMap.name = "alloy";
+                      data.persistentVolumeClaim.claimName = "alloy";
+                    }
+                    // lib.optionalAttrs cfg.logs.enable {
+                      journal.hostPath = {
+                        path = "/var/log/journal";
+                        type = "Directory";
+                      };
+                      machine-id.hostPath = {
+                        path = "/etc/machine-id";
+                        type = "File";
+                      };
+                    };
+                    # The journal's files are the systemd-journal group's. In place of the workloads' default, which is
+                    # mkDefault
+                    securityContext.supplementalGroups = lib.mkIf cfg.logs.enable (
+                      workloads.securityContext.supplementalGroups ++ [ config.ids.gids.systemd-journal ]
+                    );
                   };
                 };
               };

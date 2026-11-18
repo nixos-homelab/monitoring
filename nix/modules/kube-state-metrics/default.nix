@@ -56,7 +56,10 @@ let
   labels."app.kubernetes.io/name" = "kube-state-metrics";
 in
 {
-  imports = [ self.nixosModules.alloy ] ++ self.lib.importsApply [ ./grafana.nix ];
+  imports = [ self.nixosModules.alloy ] ++ self.lib.importsApply [
+    ./grafana.nix
+    ./logs.nix
+  ];
   options.homelab.kube-state-metrics = {
     enable = lib.mkEnableOption "kube-state-metrics";
   };

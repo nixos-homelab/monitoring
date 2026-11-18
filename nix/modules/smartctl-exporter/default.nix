@@ -27,7 +27,10 @@ let
   };
 in
 {
-  imports = [ self.nixosModules.alloy ] ++ self.lib.importsApply [ ./grafana.nix ];
+  imports = [ self.nixosModules.alloy ] ++ self.lib.importsApply [
+    ./grafana.nix
+    ./logs.nix
+  ];
   options.homelab.smartctl-exporter = {
     enable = lib.mkEnableOption "smartctl-exporter";
   };

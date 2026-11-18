@@ -10,7 +10,8 @@ metadata:
 # What alloy-config.alloy reads: its discovery.kubernetes components, the ServiceMonitors with the Services, endpoints
 # and pods they select, and the kubelet's metrics (nodes/metrics: its /metrics and /metrics/*, not the rest of the
 # kubelet API that nodes/proxy opens, exec included). A monitor whose endpoint takes a credential from a Secret or
-# ConfigMap needs get on those as well
+# ConfigMap needs get on those as well. And the pods' logs, which
+# loki.source.kubernetes tails
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -33,6 +34,10 @@ rules:
 - apiGroups: [""]
   resources: [nodes/metrics]
   verbs: [get]
+# loki.source.kubernetes tails the containers through the API server
+- apiGroups: [""]
+  resources: [pods/log]
+  verbs: [get, list, watch]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
