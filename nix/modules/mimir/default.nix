@@ -11,7 +11,10 @@ let
 in
 {
   # Alloy writes to Mimir (allowEgress below)
-  imports = [ self.nixosModules.alloy ] ++ self.lib.importsApply [ ./metrics.nix ];
+  imports = [ self.nixosModules.alloy ] ++ self.lib.importsApply [
+    ./metrics.nix
+    ./logs.nix
+  ];
   options.homelab.mimir = {
     enable = lib.mkEnableOption "Mimir";
     retention = lib.mkOption {

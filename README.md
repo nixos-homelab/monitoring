@@ -37,20 +37,48 @@ For the full list of module options, see [the documentation](https://nixos-homel
 
 ## Modules
 
-- **grafana**: dashboards, provisioned with datasources for Mimir.
+- **grafana**: dashboards, provisioned with datasources for Mimir and Loki.
   `homelab.grafana.dashboards.<name>` provisions a dashboard (read-only in
   the UI), and `homelab.grafana.homeDashboard` makes one Grafana's home. The modules' tiles
   (`homelab.grafana.home.tiles`) make a Home dashboard, which is the home by default.
 - **mimir**: long-term Prometheus-compatible metrics storage.
-- **alloy**: the [Grafana Alloy](https://grafana.com/docs/alloy/) agent
-  that scrapes and forwards metrics/logs, with a per-service
-  `integrations` allow-list like `homepage`'s.
+- **loki**: log storage, one binary on its volume, with `homelab.loki.retention` (30 days by default). On, it has
+  Alloy ship the logs (see Logs below).
+- **alloy**: the [Grafana Alloy](https://grafana.com/docs/alloy/) agent, a DaemonSet that scrapes the metrics of
+  `homelab.alloy.monitors` into Mimir and, with Loki on, ships the logs of the pods and the journal of its node.
 - **kube-state-metrics**: metrics about the cluster's objects (Deployments,
   pods, nodes, ...), Secrets excepted.
 - **node-exporter**: host-level metrics (CPU, memory, disk, network).
 - **smartctl-exporter**: disk S.M.A.R.T. health metrics, from a NixOS service on each host.
 - **systemd-exporter**: the state of each host's systemd units, failed ones included, from a NixOS service on each host.
 - **zfs-exporter**: ZFS pool and dataset metrics, from a NixOS service on each host.
+
+## Logs
+
+Alloy tails the containers of the pods on its node through the API server and the journal of the node through a
+read-only hostPath, and writes one Loki record per log record:
+
+- the line is the message alone; a stack trace, a goroutine dump or a PostgreSQL ERROR with its DETAIL is one record;
+- labels: `source` (`pod` or `journal`), `node`, `namespace` and `container` (pods) or `unit` (journal),
+  `service_name` (the application: the `app.kubernetes.io/name` of the pod, the unit), `program` (what wrote the line: the
+  container, a process a format picks out, the `SYSLOG_IDENTIFIER` in the journal) and `level`;
+- `level` is one of the names of `homelab.alloy.logs.levels` (error, warning, info, verbose, debug) or `unknown`,
+  mapped from whatever the program writes (`#` from Redis, `30` from pino, `W` from klog, the priority in the journal);
+- fields under the names of `homelab.alloy.logs.fields` (`component`, `caller`, `error`, `request_id`, ...) as
+  structured metadata, with the pod and, where the message is something else, the original line as `raw`.
+
+A module says how its containers write: `homelab.alloy.logs.pods.<name>` names a format of
+`homelab.alloy.logs.formats` (logfmt, json, klog, go, golog, nest and plain from this repo, or a dialect the module adds) and
+gives example lines with the records they must become; `homelab.alloy.logs.journal.<program>` does the same for the
+journal. Containers no module describes get a format by the look of each line. `lib.logs.check` runs the pipeline on
+the examples with the pinned Alloy and Loki in a build:
+
+```nix
+checks.logs = inputs.homelab-monitoring.lib.logs.check {
+  inherit pkgs;
+  modules = lib.attrValues self.nixosModules ++ [ { homelab.<module>.enable = true; } ];
+};
+```
 
 ## Dashboards
 

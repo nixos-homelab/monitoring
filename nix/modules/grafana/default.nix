@@ -114,9 +114,12 @@ in
   };
   imports = [
     inputs.homelab-storage.nixosModules.postgresql
+    # Its datasource follows homelab.loki.enable
+    self.nixosModules.loki
   ]
   ++ self.lib.importsApply [
     ./cluster.nix
+    ./logs.nix
     ./drilldown.nix
     ./home.nix
     ./overviews.nix
@@ -149,7 +152,8 @@ in
           "internet"
           "mimir"
           "postgresql"
-        ];
+        ]
+        ++ lib.optional config.homelab.loki.enable "loki";
         dataPath = "/var/lib/grafana";
         ingressPort = 3000;
         ports.web = 3000;
@@ -241,12 +245,25 @@ in
                   queryTimeout = "120s";
                   timeInterval = "30s";
                 };
+              }
+              ++ lib.optional config.homelab.loki.enable {
+                name = "Loki";
+                uid = self.lib.grafana.lokiUid;
+                type = "loki";
+                isDefault = false;
+                access = "proxy";
+                url = "http://loki.loki:3100";
               };
               # By name and org, as Grafana takes them: a bare name stops its provisioning, and Grafana with it
-              deleteDatasources = lib.optional (!config.homelab.mimir.enable) {
-                name = "Mimir";
-                orgId = 1;
-              };
+              deleteDatasources =
+                lib.optional (!config.homelab.mimir.enable) {
+                  name = "Mimir";
+                  orgId = 1;
+                }
+                ++ lib.optional (!config.homelab.loki.enable) {
+                  name = "Loki";
+                  orgId = 1;
+                };
             };
             "dashboards.yaml" = builtins.toJSON {
               apiVersion = 1;

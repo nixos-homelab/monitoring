@@ -61,6 +61,8 @@
         flake = {
           lib = {
             importsApply = map (path: importApply path { inherit self inputs; });
+            # The log pipeline of a configuration on its examples
+            logs = import ./nix/lib/logs { inherit self inputs lib; };
             # Dashboard builders for homelab.grafana.dashboards
             grafana = import ./nix/lib/grafana.nix { inherit lib; };
             # Screenshots of dashboards on generated samples, for working on their layout
@@ -72,6 +74,7 @@
             homepage = importApply ./nix/modules/homepage { inherit self inputs; };
             kube-state-metrics = importApply ./nix/modules/kube-state-metrics { inherit self inputs; };
             node-exporter = importApply ./nix/modules/node-exporter { inherit self inputs; };
+            loki = importApply ./nix/modules/loki { inherit self inputs; };
             mimir = importApply ./nix/modules/mimir { inherit self inputs; };
             smartctl-exporter = importApply ./nix/modules/smartctl-exporter { inherit self inputs; };
             systemd-exporter = importApply ./nix/modules/systemd-exporter { inherit self inputs; };
@@ -86,6 +89,7 @@
               homelab = {
                 alloy.enable = true;
                 grafana.enable = true;
+                loki.enable = true;
                 mimir.enable = true;
                 node-exporter.enable = true;
                 smartctl-exporter.enable = true;
@@ -123,6 +127,11 @@
               touch $out
             '';
             checks.manifests = manifests;
+            # The parsers of this flake's sources on their examples, through the pinned Alloy and Loki
+            checks.logs = self.lib.logs.check {
+              inherit pkgs;
+              inherit (machine) config;
+            };
             # nix build .#screenshots.<dashboard>[.<scenario>]; legacyPackages, as the renders nest
             legacyPackages.screenshots = self.lib.screenshots.forDashboards {
               inherit pkgs;
@@ -138,6 +147,8 @@
             # Grafana with storage's PostgreSQL on one node on k3s' bundled network, under the NixOS test driver (needs
             # KVM)
             checks.grafana-cluster = import ./nix/tests/grafana.nix { inherit self inputs pkgs; };
+            # Alloy shipping the pods' and the journal's logs to Loki on one node on k3s' bundled network (needs KVM)
+            checks.logs-cluster = import ./nix/tests/logs.nix { inherit self inputs pkgs; };
             packages = {
               options-docs = inputs.docs.lib.docs.options {
                 inherit pkgs;
@@ -152,6 +163,7 @@
                   ];
                   kube-state-metrics = [ "homelab.kube-state-metrics" ];
                   node-exporter = [ "homelab.node-exporter" ];
+                  loki = [ "homelab.loki" ];
                   mimir = [ "homelab.mimir" ];
                   smartctl-exporter = [ "homelab.smartctl-exporter" ];
                   systemd-exporter = [ "homelab.systemd-exporter" ];

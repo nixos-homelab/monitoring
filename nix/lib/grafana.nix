@@ -27,6 +27,7 @@ let
 
   # The uid of the datasource the grafana module provisions for Mimir
   mimirUid = "mimir";
+  lokiUid = "loki";
 
   # Drops the attributes left at null, so optional fields stay out of the JSON
   compact = filterAttrs (_: v: v != null);
@@ -421,7 +422,7 @@ let
 
 in
 {
-  inherit mimirUid legends;
+  inherit mimirUid lokiUid legends;
 
   # A value's levels: `warn` and `crit` where it turns orange and red, upwards (`below = true`: downwards, for a
   # value that is bad when low). One set gives a stat or gauge its colours, green below `warn`, and a time series its
