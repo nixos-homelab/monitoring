@@ -130,10 +130,10 @@ let
 
   finishStages = ''
     ${normalizeStages}
-    // A format that found no level leaves the journal's priority, or nothing
+    // A format that found no level leaves the journal's priority, or nothing: then the default
     stage.template {
       source   = "level"
-      template = "{{ with index . \"level\" }}{{ . }}{{ else }}{{ with index . \"priority\" }}{{ . }}{{ else }}unknown{{ end }}{{ end }}"
+      template = "{{ with index . \"level\" }}{{ . }}{{ else }}{{ with index . \"priority\" }}{{ . }}{{ else }}${cfg.defaultLevel}{{ end }}{{ end }}"
     }
     stage.template {
       source   = "level"
@@ -141,12 +141,12 @@ let
     }
     stage.template {
       source   = "message"
-      template = "{{ with index . \"message\" }}{{ TrimRight . \"\\n\\r \" }}{{ end }}"
+      template = "{{ with index . \"message\" }}{{ TrimRight . \"\\n\\r \" }}{{ else }}{{ TrimRight $.Entry \"\\n\\r \" }}{{ end }}"
     }
     ${lib.optionalString cfg.keepRaw ''
       stage.template {
         source   = "raw"
-        template = "{{ with index . \"message\" }}{{ if ne . $.Entry }}{{ $.Entry }}{{ end }}{{ end }}"
+        template = "{{ with index . \"message\" }}{{ if ne . (TrimRight $.Entry \"\\n\\r \") }}{{ TrimRight $.Entry \"\\n\\r \" }}{{ end }}{{ end }}"
       }
     ''}
     stage.labels {
@@ -275,6 +275,11 @@ let
     }
     loki.process "pods" {
       forward_to = [loki.write.loki.receiver]
+      // The API server hands each line over with its newline, where a format's `$` would fail to match
+      stage.replace {
+        expression = "(\\r?\\n)$"
+        replace    = ""
+      }
       ${podSources}
       ${fallbackStages "pod"}
       ${finishStages}
@@ -495,7 +500,8 @@ in
     levels = lib.mkOption {
       description = ''
         The canonical levels and the raw levels each stands for, compared lowercased. A record's level is one of these
-        names or `unknown`; a format adds raw levels of its own in its `levels`.
+        names, `defaultLevel` for a record without a level, or `unknown` for a raw level the table lacks; a format adds
+        raw levels of its own in its `levels`.
       '';
       type = lib.types.attrsOf (lib.types.listOf lib.types.str);
       default = {
@@ -620,6 +626,14 @@ in
           "remote"
         ];
       };
+    };
+    defaultLevel = lib.mkOption {
+      description = ''
+        The level of a record that has none of its own: no level in the line and, on the journal, no priority. One of
+        the names in `levels`.
+      '';
+      type = lib.types.str;
+      default = "info";
     };
     keepRaw = lib.mkOption {
       description = "Whether a record keeps its original text as metadata `raw` when its message is something else.";
@@ -785,6 +799,16 @@ in
                 }
               ];
             }
+            # As the API server hands them over, with their newline; a line without a level gets the default
+            {
+              lines = [ "ts=2026-11-18T16:40:00.000000000Z msg=\"no level here\"\n" ];
+              expect = [
+                {
+                  message = "no level here";
+                  level = "info";
+                }
+              ];
+            }
           ];
         };
         config-reloader = {
@@ -818,6 +842,16 @@ in
                 message = "Starting k3s service...";
                 level = "info";
                 program = "systemd";
+              }
+            ];
+          }
+          # A trailing newline is no reason to keep the line as raw
+          {
+            lines = [ "Reached target Multi-User System.\n" ];
+            expect = [
+              {
+                message = "Reached target Multi-User System.";
+                fields.raw = null;
               }
             ];
           }
