@@ -12,6 +12,23 @@ let
   inherit (config.homelab.grafana.signals) allocatable;
   cpu = ''rate(container_cpu_usage_seconds_total{container!=""}[$__rate_interval])'';
   memory = ''container_memory_working_set_bytes{container!=""}'';
+  inherit (config.homelab.grafana.home) areas;
+  toCluster = [
+    {
+      title = "Cluster";
+      url = "/d/cluster/cluster?\${__url_time_range}";
+    }
+  ];
+  # The monitoring stack's own namespaces, as far as it runs
+  monitoring = lib.filter (ns: config.homelab.${ns}.enable or false) [
+    "alloy"
+    "grafana"
+    "homepage"
+    "kube-state-metrics"
+    "loki"
+    "mimir"
+    "node-exporter"
+  ];
   fill = g.levels {
     warn = 0.8;
     crit = 0.95;
@@ -27,6 +44,110 @@ let
 in
 {
   config = lib.mkIf (config.homelab.grafana.enable && config.homelab.alloy.enable) {
+    homelab.grafana.home.areas.monitoring = {
+      color = "#19b6c4";
+      namespaces = monitoring;
+    };
+    homelab.grafana.home.graphs = {
+      cpu = {
+        title = "CPU utilisation by area";
+        description = "CPU time as a share of all cores, stacked: the containers' summed per area (the namespaces each module adds to it), and with the node exporter the host's remainder (k3s, ZFS, the kernel: busy time minus every container)";
+        unit = "percentunit";
+        min = 0;
+        stack = true;
+        legend = g.legends.bottom // {
+          placement = "right";
+        };
+        overrides = g.areaOverrides areas null;
+        queryOptions.maxDataPoints = 200;
+        order = 100;
+        w = 9;
+        h = 9;
+        links = toCluster;
+        series.areas = {
+          order = 1;
+          query = g.prom "${g.byArea areas cpu} / scalar(sum(machine_cpu_cores))" { legend = "{{area}}"; };
+        };
+      };
+      memory = {
+        title = "Memory by consumer";
+        description = "The nodes' memory, stacked: the containers' working set per area, and with the node exporter the host's remainder (MemTotal − MemAvailable − ARC − containers), the ZFS ARC (a cache that gives memory back) and MemAvailable";
+        unit = "bytes";
+        min = 0;
+        stack = true;
+        legend = g.legends.bottom // {
+          placement = "right";
+        };
+        overrides = g.areaOverrides areas null;
+        queryOptions.maxDataPoints = 200;
+        order = 110;
+        w = 9;
+        h = 9;
+        links = toCluster;
+        series.areas = {
+          order = 1;
+          query = g.prom (g.byArea areas memory) { legend = "{{area}}"; };
+        };
+      };
+      network = {
+        title = "Container network by area";
+        description = "cAdvisor's pod network rate summed per area, stacked: received above zero, sent below";
+        unit = "bps";
+        stack = true;
+        legend = g.legends.bottom // {
+          placement = "right";
+        };
+        # The sent series stack on their own, below the line, and stay out of the legend the received ones name
+        overrides = g.areaOverrides areas " tx" ++ [
+          {
+            matcher = {
+              id = "byRegexp";
+              options = ".* tx";
+            };
+            properties = [
+              {
+                id = "custom.hideFrom";
+                value = {
+                  legend = true;
+                  tooltip = false;
+                  viz = false;
+                };
+              }
+              {
+                id = "custom.stacking";
+                value = {
+                  mode = "normal";
+                  group = "tx";
+                };
+              }
+              {
+                id = "custom.transform";
+                value = "negative-Y";
+              }
+            ];
+          }
+        ];
+        queryOptions.maxDataPoints = 200;
+        order = 200;
+        w = 9;
+        h = 9;
+        links = toCluster;
+        series = {
+          rx = {
+            order = 1;
+            query = g.prom "8 * ${
+              g.byArea areas ''rate(container_network_receive_bytes_total{namespace!=""}[$__rate_interval])''
+            }" { legend = "{{area}}"; };
+          };
+          tx = {
+            order = 2;
+            query = g.prom "8 * ${
+              g.byArea areas ''rate(container_network_transmit_bytes_total{namespace!=""}[$__rate_interval])''
+            }" { legend = "{{area}} tx"; };
+          };
+        };
+      };
+    };
     homelab.grafana.overviews.cluster = {
       title = "Cluster";
       description = "The cluster: nodes, pods, workloads, resources, certificates, DNS, network policy";

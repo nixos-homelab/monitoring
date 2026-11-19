@@ -16,12 +16,6 @@ let
       url = "/d/workload/workload?var-workload=\${__field.labels.namespace}&\${__url_time_range}";
     }
   ];
-  toCluster = [
-    {
-      title = "Cluster";
-      url = "/d/cluster/cluster?\${__url_time_range}";
-    }
-  ];
   toServices = [
     {
       title = "Services";
@@ -226,30 +220,27 @@ in
         sel: resource: ''sum(kube_pod_container_resource_requests{${sel}, resource="${resource}"})'';
       limits = sel: resource: ''sum(kube_pod_container_resource_limits{${sel}, resource="${resource}"})'';
     };
-    homelab.grafana.home.tiles = {
-      available = {
-        group = "Workloads";
+    homelab.grafana.home.health = {
+      workloads = {
+        title = "Workloads";
+        description = "namespaces whose Deployments, DaemonSets and StatefulSets have all replicas available";
+        good = "count(${available ""} >= 1)";
+        all = "count(${available ""})";
         order = 200;
-        panel = g.ratio {
-          title = "Workloads available";
-          description = "Namespaces whose Deployments, DaemonSets and StatefulSets have all their replicas available, of all of them";
-          good = "count(${available ""} >= 1)";
-          all = "count(${available ""})";
-          links = toServices;
-        };
       };
       pods = {
-        group = "Workloads";
-        order = 201;
-        panel = g.ratio (
-          {
-            title = "Pods healthy";
-            description = "Pods running or finished, of all of them; the rest are pending, failed or unknown";
-            links = toCluster;
-          }
-          // healthyPods ""
-        );
-      };
+        title = "Pods";
+        description = "pods Running or Succeeded";
+        order = 210;
+      }
+      // healthyPods "";
+    };
+    homelab.grafana.home.annotations.restarts = g.annotation {
+      name = "Restarts";
+      expr = "sum by (namespace, container) (increase(kube_pod_container_status_restarts_total[2m])) >= 1";
+      color = "orange";
+      title = "{{namespace}}/{{container}} restarted";
+      text = "A container restarted";
     };
     homelab.grafana.overviews.services = {
       title = "Services";

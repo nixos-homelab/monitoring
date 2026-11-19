@@ -10,6 +10,12 @@
 let
   cfg = config.homelab.loki.grafana;
   g = self.lib.grafana;
+  toCluster = [
+    {
+      title = "Cluster";
+      url = "/d/cluster/cluster?\${__url_time_range}";
+    }
+  ];
   # The canonical levels, most severe first where they're the usual ones
   levels =
     let
@@ -246,21 +252,58 @@ in
         };
       };
     homelab.grafana.home.variables.debug = g.debugSwitch hidden;
-    homelab.grafana.home.tiles.logs = {
-      group = "Logs";
-      order = 205;
-      w = 8;
-      panel = g.logVolume {
-        title = "Log lines";
-        description = "How many lines the pods and the host's journal wrote, by level";
-        selector = ''{source=~".+", ${g.hideDebug}}'';
-        legend = "hidden";
-        links = [
-          {
-            title = "Cluster";
-            url = "/d/cluster/cluster?\${__url_time_range}";
-          }
-        ];
+    homelab.grafana.home.graphs = {
+      logs = {
+        title = "Log volume by level";
+        description = "Loki line count of the pod logs and the NAS journal, stacked by normalised level";
+        unit = "short";
+        min = 0;
+        stack = true;
+        legend = g.legends.bottom // {
+          placement = "right";
+        };
+        custom = {
+          drawStyle = "bars";
+          fillOpacity = 80;
+          lineInterpolation = "linear";
+          spanNulls = false;
+        };
+        overrides = g.levelColors;
+        queryOptions.maxDataPoints = 120;
+        order = 300;
+        w = 15;
+        h = 7;
+        links = toCluster;
+        series.lines.query = g.loki ''sum by (level) (count_over_time({source=~".+", ${g.hideDebug}} [$__auto]))'' {
+          legend = "{{level}}";
+        };
+      };
+      complaints = {
+        title = "Errors and warnings by source";
+        description = "Error and warning lines over the dashboard's time range: the 7 namespaces with the most in pod logs, the 3 systemd units with the most in the journal";
+        type = "piechart";
+        unit = "short";
+        options.displayLabels = [ "name" ];
+        # One point over the whole range, so the legend formats apply
+        queryOptions.maxDataPoints = 1;
+        order = 310;
+        w = 9;
+        h = 7;
+        links = toCluster;
+        series = {
+          pods = {
+            order = 1;
+            query = g.loki ''topk(7, sum by (namespace) (count_over_time({source="pod", level=~"error|warning"} [$__range])))'' {
+              legend = "{{namespace}}";
+            };
+          };
+          journal = {
+            order = 2;
+            query = g.loki ''topk(3, sum by (unit) (count_over_time({source="journal", level=~"error|warning"} [$__range])))'' {
+              legend = "{{unit}}";
+            };
+          };
+        };
       };
     };
   };

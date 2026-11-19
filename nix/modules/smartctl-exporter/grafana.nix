@@ -37,12 +37,6 @@ let
       };
     }
   ];
-  toNas = [
-    {
-      title = "NAS health";
-      url = "/d/nas/nas?\${__url_time_range}";
-    }
-  ];
   panel = order: w: h: panel: {
     inherit
       order
@@ -68,16 +62,67 @@ in
   config = lib.mkIf config.homelab.smartctl-exporter.grafana.enable {
     homelab.grafana.signals.diskInfo =
       sel: "max by (device, model_name) (smartctl_device{${sel}} * 0 + 1)";
-    homelab.grafana.home.tiles.disks = {
-      group = "NAS";
-      order = 112;
-      panel = g.ratio {
-        title = "Disks OK";
-        description = "Disks whose own SMART verdict is OK, of all of them";
-        good = "sum(smartctl_device_smart_status)";
-        all = "count(smartctl_device_smart_status)";
-        crit = 0.99;
-        links = toNas;
+    homelab.grafana.home.health.disks = {
+      title = "Disks";
+      description = "disks whose own SMART verdict is OK";
+      good = "sum(smartctl_device_smart_status)";
+      all = "count(smartctl_device_smart_status)";
+      crit = 0.99;
+      order = 110;
+    };
+    # The awake disks' spread, shaded between the coolest and the hottest
+    homelab.grafana.home.graphs.temperatures.series = {
+      disk-max = {
+        order = 200;
+        color = "blue";
+        query = g.prom ''max(smartctl_device_temperature{temperature_type="current"})'' { legend = "disk max"; };
+        overrides = [
+          {
+            matcher = {
+              id = "byName";
+              options = "disk max";
+            };
+            properties = [
+              {
+                id = "custom.fillBelowTo";
+                value = "disk min";
+              }
+              {
+                id = "custom.fillOpacity";
+                value = 25;
+              }
+            ];
+          }
+        ];
+      };
+      disk-min = {
+        order = 201;
+        color = "blue";
+        query = g.prom ''min(smartctl_device_temperature{temperature_type="current"})'' { legend = "disk min"; };
+        overrides = [
+          {
+            matcher = {
+              id = "byName";
+              options = "disk min";
+            };
+            properties = [
+              {
+                id = "custom.lineStyle";
+                value = {
+                  fill = "dash";
+                  dash = [
+                    4
+                    4
+                  ];
+                };
+              }
+              {
+                id = "custom.fillOpacity";
+                value = 0;
+              }
+            ];
+          }
+        ];
       };
     };
     homelab.grafana.overviews.nas = {
