@@ -194,29 +194,35 @@ in
             fieldLinks = [
               {
                 title = "Workload";
-                url = "/d/workload/workload?var-workload=\${__data.fields.namespace}&\${__url_time_range}";
+                url = "/d/workload/workload?var-workload=\${__data.fields[0]}&\${__url_time_range}";
               }
             ];
             options.sortBy = [
               {
-                displayName = "namespace";
+                displayName = "Workload";
                 desc = false;
               }
             ];
+            # Loki's data source turns an instant query's series into one long table (Time, a column per label,
+            # `Value #A`: makeTableFrames in grafana-loki-datasource), so its rows become a matrix, a workload per row
             transformations = [
               {
-                id = "joinByLabels";
+                id = "groupingToMatrix";
                 options = {
-                  value = "level";
-                  join = [ "namespace" ];
+                  rowField = "namespace";
+                  columnField = "level";
+                  valueField = "Value #A";
+                  # A level the workload wrote nothing at
+                  emptyValue = "zero";
                 };
               }
               {
                 id = "organize";
                 options = {
                   indexByName = lib.listToAttrs (
-                    lib.imap0 (i: name: lib.nameValuePair name i) ([ "namespace" ] ++ levels ++ [ "unknown" ])
+                    lib.imap0 (i: name: lib.nameValuePair name i) ([ "namespace\\level" ] ++ levels ++ [ "unknown" ])
                   );
+                  renameByName."namespace\\level" = "Workload";
                 };
               }
             ];
