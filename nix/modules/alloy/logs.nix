@@ -264,6 +264,14 @@ let
     }}
   '';
 
+  # Secrets out of the line before anything parses it, so neither the message nor `raw` keeps them
+  redactStages = lib.concatMapStrings (expression: ''
+    stage.replace {
+      expression = ${str expression}
+      replace    = ${str cfg.redact.replacement}
+    }
+  '') cfg.redact.expressions;
+
   # The processing alone, from labelled entries to Loki: what the tests run
   pipeline = ''
     // The pod name changes with every rollout and job run: metadata, not a label
@@ -280,12 +288,14 @@ let
         expression = "(\\r?\\n)$"
         replace    = ""
       }
+      ${redactStages}
       ${podSources}
       ${fallbackStages "pod"}
       ${finishStages}
     }
     loki.process "journal" {
       forward_to = [loki.write.loki.receiver]
+      ${redactStages}
       ${journalSources}
       ${fallbackStages "journal"}
       ${finishStages}
@@ -635,6 +645,26 @@ in
       type = lib.types.str;
       default = "info";
     };
+    redact = {
+      expressions = lib.mkOption {
+        description = ''
+          Regular expressions (RE2) for secrets in log lines, of pods and the journal alike: each capture group is
+          replaced with `replacement` before the line is parsed. The defaults catch API keys, tokens and passwords in
+          URL queries (`?apikey=...`, the way the *Arr apps log their requests) and in `X-Api-Key` and `X-Plex-Token`
+          headers.
+        '';
+        type = lib.types.listOf lib.types.str;
+        default = [
+          "(?i)[?&](?:api_?key|api_?token|access_token|token|x-plex-token|passkey|password|pass)=([^&\\s\"']+)"
+          "(?i)\\bx-(?:api-key|plex-token): *([^\\s\"']+)"
+        ];
+      };
+      replacement = lib.mkOption {
+        description = "What a secret becomes.";
+        type = lib.types.str;
+        default = "(removed)";
+      };
+    };
     keepRaw = lib.mkOption {
       description = "Whether a record keeps its original text as metadata `raw` when its message is something else.";
       type = lib.types.bool;
@@ -748,6 +778,23 @@ in
         alloy = {
           format = "go";
           examples = [
+            # The redaction, which applies to every line
+            {
+              lines = [
+                ''ts=2026-11-19T04:55:02Z level=warn msg="GET http://prowlarr.prowlarr:9696/6/api?t=tvsearch&apikey=0123456789abcdef0123456789abcdef&offset=0: 429"''
+                ''ts=2026-11-19T04:55:03Z level=warn msg="request with X-Plex-Token: abcDEF123 failed"''
+              ];
+              expect = [
+                {
+                  message = "GET http://prowlarr.prowlarr:9696/6/api?t=tvsearch&apikey=(removed)&offset=0: 429";
+                  level = "warning";
+                }
+                {
+                  message = "request with X-Plex-Token: (removed) failed";
+                  level = "warning";
+                }
+              ];
+            }
             {
               lines = [
                 ''ts=2026-11-18T16:39:52.314047301Z level=warn msg="failed to report usage" err="5 errors: Post \"https://stats.grafana.org/alloy-usage-report\": context deadline exceeded"''
