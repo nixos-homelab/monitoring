@@ -121,6 +121,7 @@ in
     ./cluster.nix
     ./logs.nix
     ./drilldown.nix
+    ./log-views.nix
     ./home.nix
     ./overviews.nix
     ./services.nix

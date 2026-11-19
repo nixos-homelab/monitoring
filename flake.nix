@@ -144,6 +144,11 @@
                 (inputs.homelab-shared.lib.images.pinned pkgs ./nix/modules/grafana/Dockerfile)."grafana/grafana";
               payload = manifests.passthru.manifests;
             };
+            # Every LogQL query of the dashboards through the pinned Loki
+            checks.logql = self.lib.logs.queries {
+              inherit pkgs;
+              inherit (machine) config;
+            };
             # Grafana with storage's PostgreSQL on one node on k3s' bundled network, under the NixOS test driver (needs
             # KVM)
             checks.grafana-cluster = import ./nix/tests/grafana.nix { inherit self inputs pkgs; };

@@ -1,4 +1,5 @@
-# lib.logs.check: the log pipeline of an evaluated configuration on its examples, with the pinned Alloy and Loki
+# lib.logs.check: the log pipeline of an evaluated configuration on its examples, with the pinned Alloy and Loki.
+# lib.logs.queries: the LogQL queries of its dashboards, through the pinned Loki
 {
   self,
   inputs,
@@ -83,6 +84,49 @@
         unpack ${alloyImage} alloy
         unpack ${lokiImage} loki
         python3 ${./check.py} "$PWD/alloy/root" "$PWD/loki/root" "$pipeline" "$examples" "$lokiConfig" "$PWD/work"
+        touch $out
+      '';
+
+  # Every LogQL query of a configuration's dashboards (config.homelab.grafana.dashboards), its variables filled in as
+  # Grafana would, on lines pushed to the pinned Loki: a line at each level for each of `streams` (label sets) and
+  # for a picked workload, another workload, the picked node's journal and another node's. A query Loki refuses, a
+  # metric query with no series, or a log query that misses a matched stream's line or returns the streams the
+  # variables leave out fails it
+  queries =
+    {
+      pkgs,
+      config,
+      streams ? [ ],
+      name ? "logql",
+    }:
+    let
+      lokiImage =
+        (inputs.homelab-shared.lib.images.pinned pkgs ../../modules/loki/Dockerfile)."grafana/loki";
+    in
+    pkgs.runCommand "check-${name}"
+      {
+        nativeBuildInputs = [
+          pkgs.gnutar
+          pkgs.jq
+          pkgs.python3
+        ];
+        dashboards = pkgs.writeText "dashboards.json" (
+          builtins.toJSON (
+            lib.mapAttrs (
+              _: d: if builtins.isAttrs d.dashboard then d.dashboard else lib.importJSON d.dashboard
+            ) config.homelab.grafana.dashboards
+          )
+        );
+        streams = pkgs.writeText "streams.json" (builtins.toJSON streams);
+        lokiConfig = pkgs.writeText "loki.json" (builtins.toJSON config.homelab.loki.config);
+      }
+      ''
+        mkdir image root
+        tar -xf ${lokiImage} -C image
+        for layer in $(jq -r '.[0].Layers[]' image/manifest.json); do
+          tar -xf "image/$layer" -C root --no-same-owner --no-same-permissions --exclude='dev/*'
+        done
+        python3 ${./queries.py} "$PWD/root" "$dashboards" "$streams" "$lokiConfig" "$PWD/work"
         touch $out
       '';
 }
