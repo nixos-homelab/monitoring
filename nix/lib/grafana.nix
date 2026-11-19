@@ -704,6 +704,24 @@ in
       };
     };
 
+  # The switch showing the levels below info (pass them: verbose, debug), off by default. Log views put
+  # `hideDebug` into their stream selectors: off, it leaves those levels out; on, it matches every level
+  debugSwitch = hidden: {
+    kind = "SwitchVariable";
+    spec = {
+      name = "debug";
+      label = "Debug";
+      description = "Show the lines below info (${lib.concatStringsSep ", " hidden})";
+      current = lib.concatStringsSep "|" hidden;
+      disabledValue = lib.concatStringsSep "|" hidden;
+      # No level is called that
+      enabledValue = "none";
+      hide = "dontHide";
+      skipUrlSync = false;
+    };
+  };
+  hideDebug = ''level!~"$debug"'';
+
   # Free text, `|~ `(?i)$search`` in log queries: the lines that match it, case aside; empty matches every line
   searchVariable = {
     kind = "TextVariable";
