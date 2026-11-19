@@ -492,9 +492,88 @@ let
         unknown = "text";
       };
 
+  # The share of `good` in `all` (PromQL giving one series each), with both numbers as the labels `good` and `all`
+  # for a legend "{{good}}/{{all}}": count_values turns a number into a label
+  ratioExpr =
+    good: all:
+    "(((${good}) or vector(0)) / (${all})) * on () group_left (good, all) (count_values(\"good\", (${good}) or vector(0)) * on () group_left (all) count_values(\"all\", (${all})))";
+
+  # The palette areas without a colour of their own take theirs from, by their place among the areas' names: no
+  # green or red, which mean healthy and broken
+  areaPalette = [
+    "#5794f2"
+    "#b877d9"
+    "#19b6c4"
+    "#ff9830"
+    "#fade2a"
+    "#c4a483"
+    "#a0522d"
+    "#ca95e5"
+    "#8ab8ff"
+    "#ffb357"
+  ];
+  # The areas' colours by name, `other` included: { media = "purple"; ... }
+  areaColors =
+    areas:
+    lib.listToAttrs (
+      lib.imap0 (i: name: {
+        inherit name;
+        value =
+          if areas.${name}.color != null then
+            areas.${name}.color
+          else
+            builtins.elemAt areaPalette (lib.mod i (lib.length areaPalette));
+      }) (lib.attrNames areas)
+    )
+    // {
+      other = "#8a8a8a";
+    };
 in
 {
-  inherit mimirUid lokiUid legends;
+  inherit mimirUid lokiUid legends ratioExpr;
+
+  # A container query (one with a `namespace` label) summed by the area of its namespace, from
+  # homelab.grafana.home.areas, a namespace in none as `other`: for "{{area}}" legends
+  byArea =
+    areas: inner:
+    "sum by (area) (${
+      lib.foldl' (
+        e: name:
+        if areas.${name}.namespaces == [ ] then
+          e
+        else
+          ''label_replace(${e}, "area", "${name}", "namespace", "${lib.concatStringsSep "|" areas.${name}.namespaces}")''
+      ) ''label_replace(${inner}, "area", "other", "namespace", ".*")'' (lib.attrNames areas)
+    })";
+
+  # The areas' colours, as overrides of the series `byArea` gives, and of the same with `suffix` (" tx")
+  areaOverrides =
+    areas: suffix:
+    lib.concatLists (
+      lib.mapAttrsToList (
+        name: color:
+        map
+          (n: {
+            matcher = {
+              id = "byName";
+              options = n;
+            };
+            properties = [
+              {
+                id = "color";
+                value = {
+                  mode = "fixed";
+                  fixedColor = color;
+                };
+              }
+            ];
+          })
+          (
+            [ name ]
+            ++ lib.optional (suffix != null) "${name}${suffix}"
+          )
+      ) (areaColors areas)
+    );
 
   # A value's levels: `warn` and `crit` where it turns orange and red, upwards (`below = true`: downwards, for a
   # value that is bad when low). One set gives a stat or gauge its colours, green below `warn`, and a time series its
@@ -910,7 +989,7 @@ in
               version = "v0";
               datasource.name = mimirUid;
               spec = {
-                expr = "(((${good}) or vector(0)) / (${all})) * on () group_left (good, all) (count_values(\"good\", (${good}) or vector(0)) * on () group_left (all) count_values(\"all\", (${all})))";
+                expr = ratioExpr good all;
                 instant = true;
                 range = false;
                 editorMode = "code";

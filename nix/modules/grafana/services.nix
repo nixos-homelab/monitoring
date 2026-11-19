@@ -18,21 +18,12 @@ let
 in
 {
   config = lib.mkIf (config.homelab.grafana.enable && config.homelab.alloy.enable) {
-    homelab.grafana.home.tiles.endpoints = {
-      group = "Workloads";
-      order = 202;
-      panel = g.ratio {
-        title = "Endpoints up";
-        description = "Metrics endpoints Alloy scraped at its last try, of all it scrapes";
-        good = "sum(up)";
-        all = "count(up)";
-        links = [
-          {
-            title = "Services";
-            url = "/d/services/services?\${__url_time_range}";
-          }
-        ];
-      };
+    homelab.grafana.home.health.endpoints = {
+      title = "Endpoints";
+      description = "metrics endpoints that answered Alloy's last scrape (up == 1)";
+      good = "sum(up)";
+      all = "count(up)";
+      order = 220;
     };
     homelab.grafana.overviews.services = {
       title = "Services";

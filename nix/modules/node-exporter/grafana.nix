@@ -1,5 +1,5 @@
 # The node exporter's panels of the NAS health dashboard: the host's CPU, memory, pressure, temperatures and fans,
-# network, disks and NFS, and its tiles on Home. Disks carry their model where the smartctl exporter runs too
+# network, disks and NFS, and what it adds to Home. Disks carry their model where the smartctl exporter runs too
 { self, ... }:
 {
   lib,
@@ -54,10 +54,6 @@ let
       crit = 0.9;
     };
   };
-  tile = order: panel: {
-    group = "NAS";
-    inherit order panel;
-  };
   panel = order: w: h: panel: {
     inherit
       order
@@ -79,37 +75,69 @@ in
     '';
   };
   config = lib.mkIf config.homelab.node-exporter.grafana.enable {
-    homelab.grafana.home.tiles = {
-      cpu = tile 100 (
-        g.stat {
-          title = "CPU";
-          description = "The share of the NAS's CPU time not idle, every core together";
-          unit = "percentunit";
-          levels = levels.cpu;
-          links = toNas;
-          queries = [ (g.prom (cpuBusy "") { }) ];
-        }
-      );
-      memory = tile 101 (
-        g.stat {
-          title = "Memory";
-          description = "Memory in use, without the page cache and the ZFS ARC: both give memory back when it's needed";
-          unit = "percentunit";
-          levels = levels.memory;
-          links = toNas;
-          queries = [ (g.prom (memoryUsed "") { }) ];
-        }
-      );
-      temperature = tile 102 (
-        g.stat {
-          title = "Hottest sensor";
-          description = "The hottest of the NAS's sensors: CPU, chipset, NVMe and the like (the disks' own are on NAS health)";
-          unit = "celsius";
-          levels = levels.temperature;
-          links = toNas;
-          queries = [ (g.prom "max(node_hwmon_temp_celsius)" { }) ];
-        }
-      );
+    homelab.grafana.home.annotations.reboots = g.annotation {
+      name = "Reboots";
+      expr = "changes(node_boot_time_seconds[2m]) > 0";
+      color = "blue";
+      title = "Reboot";
+      text = "The NAS booted";
+    };
+    homelab.grafana.home.graphs = {
+      # What the containers don't account for: k3s, ZFS, the kernel, the host's own services
+      cpu.series.host = {
+        order = 900;
+        color = "text";
+        query = g.prom ''clamp_min(sum(rate(node_cpu_seconds_total{mode!="idle"}[$__rate_interval])) - sum(rate(container_cpu_usage_seconds_total{container!=""}[$__rate_interval])), 0) / scalar(count(node_cpu_seconds_total{mode="idle"}))'' { };
+      };
+      memory.series = {
+        host = {
+          order = 900;
+          color = "text";
+          query = g.prom ''clamp_min(sum(node_memory_MemTotal_bytes) - sum(node_memory_MemAvailable_bytes) - (sum(node_zfs_arc_size) or vector(0)) - sum(container_memory_working_set_bytes{container!=""}), 0)'' { };
+        };
+        ARC = {
+          order = 910;
+          color = "super-light-blue";
+          query = g.prom "sum(node_zfs_arc_size)" { };
+        };
+        available = {
+          order = 920;
+          color = "#3a3d45";
+          query = g.prom "sum(node_memory_MemAvailable_bytes)" { };
+        };
+      };
+      temperatures.series.host = {
+        order = 100;
+        color = "orange";
+        query = g.prom "max(node_hwmon_temp_celsius)" { legend = "hottest host sensor"; };
+      };
+      disk-io = {
+        title = "Disk throughput";
+        description = "node_disk read (above zero) and written (below) bytes per second, summed over the whole disks";
+        unit = "Bps";
+        legend = g.legends.bottom // {
+          placement = "right";
+          calcs = [ "mean" ];
+        };
+        order = 220;
+        w = 9;
+        h = 5;
+        queryOptions.maxDataPoints = 200;
+        links = toNas;
+        series = {
+          read = {
+            order = 1;
+            color = "blue";
+            query = g.prom "sum(rate(node_disk_read_bytes_total{${disks}}[$__rate_interval]))" { };
+          };
+          written = {
+            order = 2;
+            color = "orange";
+            below = true;
+            query = g.prom "sum(rate(node_disk_written_bytes_total{${disks}}[$__rate_interval]))" { };
+          };
+        };
+      };
     };
     homelab.grafana.overviews.nas = {
       title = "NAS health";

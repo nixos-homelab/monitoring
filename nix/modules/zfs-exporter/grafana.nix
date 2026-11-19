@@ -81,29 +81,30 @@ in
     '';
   };
   config = lib.mkIf config.homelab.zfs-exporter.grafana.enable {
-    homelab.grafana.home.tiles = {
-      pools = {
-        group = "NAS";
-        order = 110;
-        panel = g.ratio {
-          title = "Pools online";
-          description = "Pools whose health is ONLINE, of all of them; DEGRADED (a disk missing, still serving) is orange";
-          good = "count(zfs_pool_health == 0)";
-          all = "count(zfs_pool_health)";
-          links = toNas;
-        };
-      };
-      fullest = {
-        group = "NAS";
-        order = 111;
-        panel = g.stat {
-          title = "Fullest pool";
-          description = "The fullest pool's allocated share; ZFS slows down past 80 % and is in trouble past 90 %";
-          unit = "percentunit";
-          levels = fill;
-          links = toNas;
-          queries = [ (g.prom "max(zfs_pool_allocated_bytes / zfs_pool_size_bytes)" { }) ];
-        };
+    homelab.grafana.home.health.pools = {
+      title = "Pools";
+      description = "ONLINE pools (DEGRADED is a disk missing, still serving)";
+      good = "count(zfs_pool_health == 0)";
+      all = "count(zfs_pool_health)";
+      crit = 0.99;
+      order = 100;
+    };
+    homelab.grafana.home.graphs.pools = {
+      title = "ZFS pool allocation";
+      description = "allocated / size per pool; orange from 80 % (the allocator slows down), red from 90 %";
+      type = "bargauge";
+      unit = "percentunit";
+      min = 0;
+      max = 1;
+      decimals = 0;
+      thresholds = fill.steps;
+      order = 210;
+      w = 9;
+      h = 4;
+      links = toNas;
+      series.pools.query = g.prom "max by (pool) (zfs_pool_allocated_bytes / zfs_pool_size_bytes)" {
+        legend = "{{pool}}";
+        instant = true;
       };
     };
     homelab.grafana.overviews.nas = {

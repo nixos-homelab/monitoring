@@ -36,22 +36,13 @@ in
     '';
   };
   config = lib.mkIf config.homelab.systemd-exporter.grafana.enable {
-    homelab.grafana.home.tiles.units = {
-      group = "NAS";
+    homelab.grafana.home.health.units = {
+      title = "Units";
+      description = "systemd units not failed";
+      good = ''count(systemd_unit_state{state="failed"} == 0)'';
+      all = ''count(systemd_unit_state{state="failed"})'';
+      crit = 0.99;
       order = 120;
-      panel = g.stat {
-        title = "Failed units";
-        description = "The host's systemd units in the failed state; NAS health lists them";
-        decimals = 0;
-        levels = failed;
-        links = [
-          {
-            title = "NAS health";
-            url = "/d/nas/nas?\${__url_time_range}";
-          }
-        ];
-        queries = [ (g.prom ''sum(systemd_unit_state{state="failed"}) or vector(0)'' { }) ];
-      };
     };
     homelab.grafana.overviews.nas = {
       title = "NAS health";
