@@ -983,6 +983,12 @@ in
             step = "60s";
           };
         };
+        # The Prometheus annotation support reads the formats from the top level of the v1 annotation, which v2 only
+        # fills from here; inside the query they end up in `target`, where it ignores them and the hover stays empty
+        legacyOptions = compact {
+          titleFormat = title;
+          textFormat = text;
+        };
       };
     };
 
