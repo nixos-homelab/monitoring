@@ -12,7 +12,8 @@ let
   # A string as an Alloy string literal (JSON's escapes are Alloy's)
   str = builtins.toJSON;
   # An attrset as an Alloy object of strings
-  obj = attrs: "{ ${lib.concatStringsSep ", " (lib.mapAttrsToList (k: v: "${str k} = ${str v}") attrs)} }";
+  obj =
+    attrs: "{ ${lib.concatStringsSep ", " (lib.mapAttrsToList (k: v: "${str k} = ${str v}") attrs)} }";
   # The prefix generic formats extract raw field names under, apart from the labels Alloy seeds into the extracted map
   rawPrefix = "f.";
 
@@ -25,11 +26,13 @@ let
       ];
       branches = lib.mapAttrsToList (
         canonical: raws:
-        ''has $l (list ${lib.concatMapStringsSep " " (r: str (lib.toLower r)) (lib.unique raws)})}}${canonical}''
+        "has $l (list ${
+          lib.concatMapStringsSep " " (r: str (lib.toLower r)) (lib.unique raws)
+        })}}${canonical}"
       ) table;
     in
     # A missing level leaves .Value out; the template then fails and the key stays missing, set to unknown later
-    ''{{- $l := ToLower (TrimSpace .Value) -}}{{- if ${lib.concatStringsSep "{{ else if " branches}{{ else }}unknown{{ end -}}'';
+    "{{- $l := ToLower (TrimSpace .Value) -}}{{- if ${lib.concatStringsSep "{{ else if " branches}{{ else }}unknown{{ end -}}";
 
   # The stages of a format and its source, wrapped in a match on the source's labels
   sourceStages =
@@ -124,8 +127,9 @@ let
     ];
   };
   metadataFields = lib.attrNames cfg.fields;
-  levelChain =
-    lib.foldr (raw: rest: ''{{ with index . "${rawPrefix}${raw}" }}{{ . }}{{ else }}${rest}{{ end }}'') "" allFields.level;
+  levelChain = lib.foldr (
+    raw: rest: ''{{ with index . "${rawPrefix}${raw}" }}{{ . }}{{ else }}${rest}{{ end }}''
+  ) "" allFields.level;
   levelOrRaw = ''{{ with index . "level" }}{{ . }}{{ else }}${levelChain}{{ end }}'';
 
   finishStages = ''
@@ -143,6 +147,8 @@ let
       source   = "message"
       template = "{{ with index . \"message\" }}{{ TrimRight . \"\\n\\r \" }}{{ else }}{{ TrimRight $.Entry \"\\n\\r \" }}{{ end }}"
     }
+    // Messages their source demotes, by the final message
+    ${demoteStages}
     ${lib.optionalString cfg.keepRaw ''
       stage.template {
         source   = "raw"
@@ -180,10 +186,17 @@ let
       ''
         stage.json {
           ${lib.optionalString (source != null) "source      = ${str source}"}
-          expressions = ${obj (lib.listToAttrs (map (r: lib.nameValuePair "${rawPrefix}${r}" (str r)) names))}
+          expressions = ${
+            obj (lib.listToAttrs (map (r: lib.nameValuePair "${rawPrefix}${r}" (str r)) names))
+          }
         }
       '';
-  logfmtStages = source: extractStages { kind = "logfmt"; inherit source; } rawNames;
+  logfmtStages =
+    source:
+    extractStages {
+      kind = "logfmt";
+      inherit source;
+    } rawNames;
   jsonStages = extractStages {
     kind = "json";
     source = null;
@@ -211,20 +224,29 @@ let
     }
   '';
 
+  # The labels of a pod source's lines, and of a journal source's
+  podMatchers =
+    s:
+    [ ''source="pod"'' ]
+    ++ lib.optional (s.namespace != null) "namespace=${str s.namespace}"
+    ++ [
+      (
+        if s.containerPattern != null then
+          "container=~${str s.containerPattern}"
+        else
+          "container=${str s.container}"
+      )
+    ];
+  journalMatchers = s: [
+    ''source="journal"''
+    "program=${str s.program}"
+  ];
   podSources = lib.concatStrings (
     lib.mapAttrsToList (
       _: s:
       sourceStages {
-        selector = "{${
-          lib.concatStringsSep ", " (
-            # The first source that matches parses the line
-            [ ''source="pod", parsed=""'' ]
-            ++ lib.optional (s.namespace != null) "namespace=${str s.namespace}"
-            ++ [
-              (if s.containerPattern != null then "container=~${str s.containerPattern}" else "container=${str s.container}")
-            ]
-          )
-        }}";
+        # The first source that matches parses the line
+        selector = "{${lib.concatStringsSep ", " (podMatchers s ++ [ ''parsed=""'' ])}}";
         inherit (s)
           format
           service
@@ -238,11 +260,42 @@ let
     lib.mapAttrsToList (
       _: s:
       sourceStages {
-        selector = ''{source="journal", parsed="", program=${str s.program}}'';
+        selector = "{${lib.concatStringsSep ", " (journalMatchers s ++ [ ''parsed=""'' ])}}";
         inherit (s) format service;
         extraFields = s.fields;
       }
     ) cfg.journal
+  );
+  # The sources' enabled demotions, each a match on its source's labels: a regex on the final message marks the record,
+  # a template lowers its level. Each demotion marks under a key of its own, so one can't set off another's level
+  demotions = lib.concatLists (
+    lib.mapAttrsToList (
+      _: s:
+      map (d: d // { matchers = podMatchers s; }) (
+        lib.attrValues (lib.filterAttrs (_: d: d.enable) s.demote)
+      )
+    ) cfg.pods
+    ++ lib.mapAttrsToList (
+      _: s:
+      map (d: d // { matchers = journalMatchers s; }) (
+        lib.attrValues (lib.filterAttrs (_: d: d.enable) s.demote)
+      )
+    ) cfg.journal
+  );
+  demoteStages = lib.concatStrings (
+    lib.imap0 (i: d: ''
+      stage.match {
+        selector = ${str "{${lib.concatStringsSep ", " d.matchers}}"}
+        stage.regex {
+          source     = "message"
+          expression = ${str "(?s)(?P<demote_${toString i}>^(?:${d.expression})$)"}
+        }
+        stage.template {
+          source   = "level"
+          template = ${str ''{{ if index . "demote_${toString i}" }}${d.level}{{ else }}{{ .Value }}{{ end }}''}
+        }
+      }
+    '') demotions
   );
   # Lines of pods no module describes: the shape of the line picks a generic format
   fallbackStages = source: ''
@@ -490,6 +543,35 @@ let
     type = lib.types.listOf example;
     default = [ ];
   };
+  demoteOption = lib.mkOption {
+    description = ''
+      Messages of this source that say nothing worth their level, by name: a health check, a heartbeat, a line whose
+      content is all in fields. They get `level` in place of the one they came with, while `enable`, which follows
+      `homelab.alloy.logs.demoteNoise`, is on.
+    '';
+    type = lib.types.attrsOf (
+      lib.types.submodule {
+        options = {
+          expression = lib.mkOption {
+            description = "An RE2 regular expression the whole message matches, after parsing and redaction.";
+            type = lib.types.str;
+          };
+          level = lib.mkOption {
+            description = "The level they get: one of the names in `homelab.alloy.logs.levels`.";
+            type = lib.types.str;
+            default = "debug";
+          };
+          enable = lib.mkOption {
+            description = "Whether these messages get `level`.";
+            type = lib.types.bool;
+            default = cfg.demoteNoise;
+            defaultText = lib.literalExpression "config.homelab.alloy.logs.demoteNoise";
+          };
+        };
+      }
+    );
+    default = { };
+  };
   fieldsOption = lib.mkOption {
     description = ''
       More fields of this source: raw name to canonical name. The canonical name joins the structured metadata only if
@@ -665,6 +747,14 @@ in
         default = "(removed)";
       };
     };
+    demoteNoise = lib.mkOption {
+      description = ''
+        Whether the messages the sources' `demote` name get their lower level (debug, mostly): the default of every
+        demotion's `enable`. Off, every message keeps the level it came with.
+      '';
+      type = lib.types.bool;
+      default = true;
+    };
     keepRaw = lib.mkOption {
       description = "Whether a record keeps its original text as metadata `raw` when its message is something else.";
       type = lib.types.bool;
@@ -720,6 +810,7 @@ in
                 default = null;
               };
               fields = fieldsOption;
+              demote = demoteOption;
               examples = examplesOption;
             };
           }
@@ -753,6 +844,7 @@ in
                 default = null;
               };
               fields = fieldsOption;
+              demote = demoteOption;
               examples = examplesOption;
             };
           }
@@ -777,6 +869,8 @@ in
       pods = lib.mkIf config.homelab.alloy.enable {
         alloy = {
           format = "go";
+          # client-go passes on the API server's warning on every watch of Endpoints
+          demote.endpoints-deprecated.expression = "Warning: v1 Endpoints is deprecated in v1\\.\\d+\\+; use discovery\\.k8s\\.io/v1 EndpointSlice";
           examples = [
             # The redaction, which applies to every line
             {
@@ -817,7 +911,8 @@ in
                 }
                 {
                   message = "Warning: v1 Endpoints is deprecated in v1.33+; use discovery.k8s.io/v1 EndpointSlice";
-                  level = "info";
+                  # Demoted
+                  level = "debug";
                   fields.caller = "warnings.go:107";
                 }
                 {
