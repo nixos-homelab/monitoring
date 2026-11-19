@@ -9,6 +9,8 @@ anything below info.
 import json
 import re
 import os
+import random
+import shutil
 import socket
 import subprocess
 import sys
@@ -36,13 +38,33 @@ VARIABLES = {
 }
 
 
-def free_port():
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
+def free_ports(n):
+    """n distinct ports free on 127.0.0.1, below the kernel's ephemeral range.
+
+    Port 0 would hand out a port from that range, where Loki's own outgoing connections take their local ports
+    between the pick and the bind; each socket stays open until all n are picked, so no two are equal.
+    """
+    try:
+        low, high = map(int, open("/proc/sys/net/ipv4/ip_local_port_range").read().split())
+    except (OSError, ValueError):
+        low, high = 32768, 60999
+    first, last = (10000, low - 1) if low > 11000 else (high + 1, 65535)
+    held = []
+    try:
+        while len(held) < n:
+            s = socket.socket()
+            try:
+                s.bind(("127.0.0.1", random.randint(first, last)))
+            except OSError:
+                s.close()
+                continue
+            held.append(s)
+        return [s.getsockname()[1] for s in held]
+    finally:
+        for s in held:
+            s.close()
 
 
-http, grpc = free_port(), free_port()
 data = os.path.join(work, "loki")
 
 
@@ -56,15 +78,23 @@ def move(value):
     return value
 
 
-config = move(json.load(open(loki_config_file)))
-config["server"].update(http_listen_port=http, grpc_listen_port=grpc, http_listen_address="127.0.0.1")
-config["common"]["instance_addr"] = "127.0.0.1"
-config_file = os.path.join(work, "loki.yaml")
-json.dump(config, open(config_file, "w"))
-log = open(os.path.join(work, "loki.log"), "w")
-loki = subprocess.Popen(
-    [os.path.join(loki_root, "usr/bin/loki"), f"-config.file={config_file}"], stdout=log, stderr=subprocess.STDOUT
-)
+module_config = json.load(open(loki_config_file))
+
+
+def start():
+    """Picks the ports, writes the configuration and starts Loki."""
+    global http, loki
+    http, grpc = free_ports(2)
+    shutil.rmtree(data, ignore_errors=True)
+    config = move(module_config)
+    config["server"].update(http_listen_port=http, grpc_listen_port=grpc, http_listen_address="127.0.0.1")
+    config["common"]["instance_addr"] = "127.0.0.1"
+    config_file = os.path.join(work, "loki.yaml")
+    json.dump(config, open(config_file, "w"))
+    log = open(os.path.join(work, "loki.log"), "w")
+    loki = subprocess.Popen(
+        [os.path.join(loki_root, "usr/bin/loki"), f"-config.file={config_file}"], stdout=log, stderr=subprocess.STDOUT
+    )
 
 
 def fail(message):
@@ -87,17 +117,31 @@ def request(path, params=None, body=None):
         return e.code, e.read()
 
 
-for _ in range(240):
-    if loki.poll() is not None:
-        fail(f"Loki exited with {loki.returncode}")
-    try:
-        if request("/ready")[0] == 200:
-            break
-    except (urllib.error.URLError, ConnectionError, OSError):
-        pass
-    time.sleep(0.5)
-else:
+def wait_ready():
+    """True once Loki is ready, False if it exited on a taken port."""
+    for _ in range(240):
+        if loki.poll() is not None:
+            if "address already in use" in open(os.path.join(work, "loki.log")).read():
+                return False
+            fail(f"Loki exited with {loki.returncode}")
+        try:
+            if request("/ready")[0] == 200:
+                return True
+        except (urllib.error.URLError, ConnectionError, OSError):
+            pass
+        time.sleep(0.5)
     fail("Loki never got ready")
+
+
+# Something can still take a port between the pick and the bind: start over on new ports then
+for attempt in range(1, 4):
+    start()
+    if wait_ready():
+        break
+    if attempt == 3:
+        fail(f"Loki found a port taken on each of {attempt} attempts")
+    print("Loki found a port taken, starting over on new ports")
+    loki.wait()
 
 # The picked workload and another, the picked node's journal and another node's, then the given streams; a line's
 # text is its stream's index and its level

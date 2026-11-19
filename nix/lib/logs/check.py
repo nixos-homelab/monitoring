@@ -8,6 +8,8 @@ Usage: check.py ALLOY_ROOT LOKI_ROOT PIPELINE EXAMPLES LOKI_CONFIG WORK
 
 import json
 import os
+import random
+import shutil
 import socket
 import subprocess
 import sys
@@ -21,16 +23,35 @@ examples = json.load(open(examples_file))
 os.makedirs(work, exist_ok=True)
 
 
-def free_port():
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
+def free_ports(n):
+    """n distinct ports free on 127.0.0.1, below the kernel's ephemeral range.
 
+    Port 0 would hand out a port from that range, where Loki's and Alloy's own outgoing connections take their local
+    ports between the pick and the bind; each socket stays open until all n are picked, so no two are equal.
+    """
+    try:
+        low, high = map(int, open("/proc/sys/net/ipv4/ip_local_port_range").read().split())
+    except (OSError, ValueError):
+        low, high = 32768, 60999
+    first, last = (10000, low - 1) if low > 11000 else (high + 1, 65535)
+    held = []
+    try:
+        while len(held) < n:
+            s = socket.socket()
+            try:
+                s.bind(("127.0.0.1", random.randint(first, last)))
+            except OSError:
+                s.close()
+                continue
+            held.append(s)
+        return [s.getsockname()[1] for s in held]
+    finally:
+        for s in held:
+            s.close()
 
-loki_http, loki_grpc, alloy_http, pods_port, journal_port = (free_port() for _ in range(5))
 
 # Loki as the module configures it, with its paths and ports moved into the sandbox
-config = json.load(open(loki_config_file))
+module_config = json.load(open(loki_config_file))
 data = os.path.join(work, "loki")
 
 
@@ -44,17 +65,24 @@ def move(value):
     return value
 
 
-config = move(config)
-config["server"].update(http_listen_port=loki_http, grpc_listen_port=loki_grpc, http_listen_address="127.0.0.1")
-config["common"]["instance_addr"] = "127.0.0.1"
-loki_config = os.path.join(work, "loki.yaml")
-json.dump(config, open(loki_config, "w"))
+def start():
+    """Picks the ports, writes both configurations and starts Loki and Alloy."""
+    global loki_http, alloy_http, pods_port, journal_port, loki, alloy
+    loki_http, loki_grpc, alloy_http, pods_port, journal_port, pods_grpc, journal_grpc = free_ports(7)
+    for d in [data, os.path.join(work, "alloy")]:
+        shutil.rmtree(d, ignore_errors=True)
 
-alloy_config = os.path.join(work, "config.alloy")
-with open(alloy_config, "w") as f:
-    f.write(open(pipeline_file).read())
-    f.write(
-        f"""
+    config = move(module_config)
+    config["server"].update(http_listen_port=loki_http, grpc_listen_port=loki_grpc, http_listen_address="127.0.0.1")
+    config["common"]["instance_addr"] = "127.0.0.1"
+    loki_config = os.path.join(work, "loki.yaml")
+    json.dump(config, open(loki_config, "w"))
+
+    alloy_config = os.path.join(work, "config.alloy")
+    with open(alloy_config, "w") as f:
+        f.write(open(pipeline_file).read())
+        f.write(
+            f"""
 loki.write "loki" {{
   endpoint {{
     url = "http://127.0.0.1:{loki_http}/loki/api/v1/push"
@@ -68,7 +96,7 @@ loki.source.api "pods" {{
   }}
   grpc {{
     listen_address = "127.0.0.1"
-    listen_port    = {free_port()}
+    listen_port    = {pods_grpc}
   }}
   use_incoming_timestamp = true
   forward_to             = [loki.process.pod_metadata.receiver]
@@ -80,37 +108,37 @@ loki.source.api "journal" {{
   }}
   grpc {{
     listen_address = "127.0.0.1"
-    listen_port    = {free_port()}
+    listen_port    = {journal_grpc}
   }}
   use_incoming_timestamp = true
   forward_to             = [loki.process.journal.receiver]
 }}
 """
-    )
+        )
 
-loki_log = open(os.path.join(work, "loki.log"), "w")
-loki = subprocess.Popen(
-    [os.path.join(loki_root, "usr/bin/loki"), f"-config.file={loki_config}"],
-    stdout=loki_log,
-    stderr=subprocess.STDOUT,
-)
-# The distroless image's binary links its own glibc: run it with the image's loader
-libs = ":".join(os.path.join(alloy_root, d) for d in ["usr/lib/x86_64-linux-gnu", "lib/x86_64-linux-gnu", "usr/lib64"])
-alloy_log = open(os.path.join(work, "alloy.log"), "w")
-alloy = subprocess.Popen(
-    [
-        os.path.join(alloy_root, "usr/lib64/ld-linux-x86-64.so.2"),
-        "--library-path",
-        libs,
-        os.path.join(alloy_root, "usr/bin/alloy"),
-        "run",
-        alloy_config,
-        f"--storage.path={os.path.join(work, 'alloy')}",
-        f"--server.http.listen-addr=127.0.0.1:{alloy_http}",
-    ],
-    stdout=alloy_log,
-    stderr=subprocess.STDOUT,
-)
+    loki_log = open(os.path.join(work, "loki.log"), "w")
+    loki = subprocess.Popen(
+        [os.path.join(loki_root, "usr/bin/loki"), f"-config.file={loki_config}"],
+        stdout=loki_log,
+        stderr=subprocess.STDOUT,
+    )
+    # The distroless image's binary links its own glibc: run it with the image's loader
+    libs = ":".join(os.path.join(alloy_root, d) for d in ["usr/lib/x86_64-linux-gnu", "lib/x86_64-linux-gnu", "usr/lib64"])
+    alloy_log = open(os.path.join(work, "alloy.log"), "w")
+    alloy = subprocess.Popen(
+        [
+            os.path.join(alloy_root, "usr/lib64/ld-linux-x86-64.so.2"),
+            "--library-path",
+            libs,
+            os.path.join(alloy_root, "usr/bin/alloy"),
+            "run",
+            alloy_config,
+            f"--storage.path={os.path.join(work, 'alloy')}",
+            f"--server.http.listen-addr=127.0.0.1:{alloy_http}",
+        ],
+        stdout=alloy_log,
+        stderr=subprocess.STDOUT,
+    )
 
 
 def fail(message):
@@ -129,10 +157,16 @@ def get(url, headers=None):
         return r.status, r.read()
 
 
+class PortTaken(Exception):
+    pass
+
+
 def wait_ready(url, what):
     for _ in range(240):
         for proc, name in ((alloy, "Alloy"), (loki, "Loki")):
             if proc.poll() is not None:
+                if "address already in use" in open(os.path.join(work, f"{name.lower()}.log")).read():
+                    raise PortTaken(name)
                 fail(f"{name} exited with {proc.returncode} while waiting for {what}")
         try:
             if get(url)[0] == 200:
@@ -143,8 +177,20 @@ def wait_ready(url, what):
     fail(f"{what} never got ready")
 
 
-wait_ready(f"http://127.0.0.1:{loki_http}/ready", "Loki")
-wait_ready(f"http://127.0.0.1:{alloy_http}/-/ready", "Alloy")
+# Something can still take a port between the pick and the bind: start over on new ports then
+for attempt in range(1, 4):
+    start()
+    try:
+        wait_ready(f"http://127.0.0.1:{loki_http}/ready", "Loki")
+        wait_ready(f"http://127.0.0.1:{alloy_http}/-/ready", "Alloy")
+        break
+    except PortTaken as e:
+        if attempt == 3:
+            fail(f"{e} found a port taken on each of {attempt} attempts")
+        print(f"{e} found a port taken, starting over on new ports")
+        for proc in (alloy, loki):
+            proc.kill()
+            proc.wait()
 
 
 def labels_of(example):
