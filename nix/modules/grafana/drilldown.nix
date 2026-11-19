@@ -77,6 +77,14 @@ in
     );
     default = { };
   };
+  options.homelab.grafana.drilldown.variables = lib.mkOption {
+    description = ''
+      Variables of the Workload dashboard besides `workload`, by name, which its rows filter on: from
+      `lib.grafana.levelVariable` and the like. Modules whose rows filter on the same variable define it alike.
+    '';
+    type = lib.types.attrsOf (lib.types.attrsOf lib.types.anything);
+    default = { };
+  };
   # The condition on the rows sits on the definition: on the whole config it would need the rows to know whether
   # this module defines any
   config = lib.mkIf config.homelab.grafana.enable {
@@ -234,7 +242,8 @@ in
             # cAdvisor's series: every namespace with a running container, scraped or not
             query = ''label_values(container_memory_working_set_bytes{container!=""}, namespace)'';
           })
-        ];
+        ]
+        ++ lib.attrValues cfg.variables;
         layout = g.rows (
           map
             (

@@ -165,6 +165,20 @@ let
       showHeader = true;
       cellHeight = "sm";
     };
+    # Newest first, each line whole, its fields a click away; the labels stay out of the lines, whose panel says
+    # whose they are
+    logs = {
+      showTime = true;
+      showLabels = false;
+      showCommonLabels = false;
+      wrapLogMessage = true;
+      prettifyLogMessage = false;
+      enableLogDetails = true;
+      enableInfiniteScrolling = true;
+      showLogContextToggle = true;
+      dedupStrategy = "none";
+      sortOrder = "Descending";
+    };
     status-history = {
       showValue = "never";
       rowHeight = 0.85;
@@ -420,6 +434,64 @@ let
         } items).items;
     };
 
+  # A LogQL query against Loki: a log query for a `logs` panel (`maxLines` of the newest lines, `direction` "forward"
+  # for the oldest), or a metric query (count_over_time, rate) for a time series, `legend` as in `prom`
+  loki =
+    expr:
+    {
+      legend ? null,
+      instant ? false,
+      hidden ? false,
+      maxLines ? null,
+      direction ? null,
+    }:
+    {
+      kind = "PanelQuery";
+      spec = {
+        inherit hidden;
+        query = {
+          kind = "DataQuery";
+          group = "loki";
+          version = "v0";
+          datasource.name = lokiUid;
+          spec = compact {
+            inherit expr maxLines direction;
+            queryType = if instant then "instant" else "range";
+            editorMode = "code";
+            legendFormat = legend;
+          };
+        };
+      };
+    };
+
+  # The colours of the canonical log levels (homelab.alloy.logs.levels, and `unknown` for a level no mapping knows),
+  # as overrides of the series a query `by (level)` gives
+  levelColors =
+    lib.mapAttrsToList
+      (level: color: {
+        matcher = {
+          id = "byName";
+          options = level;
+        };
+        properties = [
+          {
+            id = "color";
+            value = {
+              mode = "fixed";
+              fixedColor = color;
+            };
+          }
+        ];
+      })
+      {
+        error = "red";
+        warning = "orange";
+        info = "green";
+        verbose = "purple";
+        debug = "blue";
+        unknown = "text";
+      };
+
 in
 {
   inherit mimirUid lokiUid legends;
@@ -528,6 +600,125 @@ in
         };
       };
     };
+
+  # Log lines, newest first
+  logs = panel "logs";
+
+  inherit loki levelColors;
+
+  # How many lines a stream selector (and filters) matched, stacked bars per interval, split `by` a label: by level,
+  # in the levels' colours, unless it says otherwise
+  logVolume =
+    {
+      title,
+      selector,
+      by ? "level",
+      description ? null,
+      legend ? null,
+      links ? [ ],
+      fieldLinks ? null,
+      noValue ? "No log lines",
+    }:
+    panel "timeseries" {
+      inherit
+        title
+        description
+        legend
+        links
+        fieldLinks
+        noValue
+        ;
+      unit = "short";
+      min = 0;
+      custom = {
+        drawStyle = "bars";
+        fillOpacity = 80;
+        gradientMode = "none";
+        lineWidth = 1;
+        stacking.mode = "normal";
+        spanNulls = false;
+      };
+      overrides = lib.optionals (by == "level") levelColors;
+      queryOptions.maxDataPoints = 100;
+      queries = [
+        (loki "sum by (${by}) (count_over_time(${selector} [$__auto]))" {
+          legend = "{{${by}}}";
+        })
+      ];
+    };
+
+  # A link into Logs Drilldown (the grafana-lokiexplore-app), on the lines of the streams with `label` = `value`
+  # and the further `filters` ({ label = value; }), over the dashboard's time range. Values may be variables
+  logsDrilldown =
+    {
+      label,
+      value,
+      filters ? { },
+      title ? "Logs Drilldown",
+    }:
+    {
+      inherit title;
+      url =
+        "/a/grafana-lokiexplore-app/explore/${label}/${value}/logs?var-ds=${lokiUid}"
+        + lib.concatStrings (
+          lib.mapAttrsToList (l: v: "&var-filters=${l}%7C%3D%7C${v}") ({ ${label} = value; } // filters)
+        )
+        + "&\${__url_time_range}";
+    };
+
+  # The level picked on boards with log lines, `level=~"$level"` in their selectors: every canonical level (pass the
+  # names of homelab.alloy.logs.levels) and `unknown`, all of them by default
+  levelVariable =
+    levels:
+    let
+      values = levels ++ [ "unknown" ];
+    in
+    {
+      kind = "CustomVariable";
+      spec = {
+        name = "level";
+        label = "Level";
+        query = lib.concatStringsSep "," values;
+        current = {
+          text = [ "All" ];
+          value = [ "$__all" ];
+        };
+        options = [
+          {
+            text = "All";
+            value = "$__all";
+            selected = true;
+          }
+        ]
+        ++ map (v: {
+          text = v;
+          value = v;
+          selected = false;
+        }) values;
+        multi = true;
+        includeAll = true;
+        allValue = ".+";
+        hide = "dontHide";
+        skipUrlSync = false;
+        allowCustomValue = false;
+      };
+    };
+
+  # Free text, `|~ `(?i)$search`` in log queries: the lines that match it, case aside; empty matches every line
+  searchVariable = {
+    kind = "TextVariable";
+    spec = {
+      name = "search";
+      label = "Search";
+      query = "";
+      current = {
+        text = "";
+        value = "";
+      };
+      hide = "dontHide";
+      skipUrlSync = false;
+    };
+  };
 
   inherit panel;
   timeseries = panel "timeseries";
