@@ -2,10 +2,12 @@
 
 Loki gets a line at every level for each stream: the given ones, and those the variables below pick or don't. Each
 query then runs with its variables filled in: a metric query must give series, a log query every level's line of
-the streams it matches, and none of the streams the variables leave out.
+the streams it matches, and none of the streams the variables leave out. With the debug switch off, neither has
+anything below info.
 """
 
 import json
+import re
 import os
 import socket
 import subprocess
@@ -25,6 +27,8 @@ VARIABLES = {
     "node": "nas",
     "level": ".+",
     "search": "",
+    # The debug switch off: the levels below info left out
+    "debug": "debug|verbose",
     "__auto": "1m",
     "__range": "1h",
     "__interval": "1m",
@@ -143,6 +147,8 @@ for board, resource in sorted(dashboards.items()):
         panel_type = element["spec"].get("vizConfig", {}).get("group")
         for spec in queries(element):
             expr = interpolate(spec["expr"])
+            # The levels a query's lines may have: those the debug switch leaves in, where it filters on it
+            shown = [l for l in LEVELS if "$debug" not in spec["expr"] or not re.fullmatch(VARIABLES["debug"], l)]
             what = f"{board}: {title}: {expr}"
             params = {"query": expr, "limit": str(spec.get("maxLines", 100))}
             if spec.get("queryType") == "instant":
@@ -160,11 +166,13 @@ for board, resource in sorted(dashboards.items()):
                     fail(f"{what}: a logs panel with a {result['resultType']} query")
                 got = [v[1].split() for s in result["result"] for v in s["values"]]
                 matched = {int(n[len("stream") :]) for n, _ in got}
-                if not got or matched & LEFT_OUT or len(got) != len(matched) * len(LEVELS):
+                if not got or matched & LEFT_OUT or len(got) != len(matched) * len(shown):
                     lines = sorted(" ".join(line) for line in got)
-                    fail(f"{what}: expected every level of streams other than {sorted(LEFT_OUT)}, got {lines}")
+                    fail(f"{what}: expected levels {shown} of streams other than {sorted(LEFT_OUT)}, got {lines}")
             elif not result["result"]:
                 fail(f"{what}: no series from the lines pushed")
+            elif any(r["metric"].get("level") not in shown for r in result["result"] if "level" in r["metric"]):
+                fail(f"{what}: series of levels the debug switch leaves out: {[r['metric'] for r in result['result']]}")
             print(f"ok: {what}")
             checked += 1
 

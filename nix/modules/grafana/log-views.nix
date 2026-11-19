@@ -23,8 +23,16 @@ let
       known = lib.filter (l: config.homelab.alloy.logs.levels ? ${l}) rank;
     in
     known ++ lib.subtractLists rank (lib.attrNames config.homelab.alloy.logs.levels);
-  # The level and search variables, as every view with lines filters them
-  filters = ''level=~"$level"} |~ `(?i)$search`'';
+  # The levels below info, which the boards' debug switch shows
+  hidden = lib.filter (
+    l:
+    lib.elem l [
+      "verbose"
+      "debug"
+    ]
+  ) levels;
+  # The level, debug and search variables, as every view with lines filters them
+  filters = ''level=~"$level", ${g.hideDebug}} |~ `(?i)$search`'';
   workload = ''{namespace="$workload", ${filters}'';
   journal = ''{source="journal", node="$node", ${filters}'';
   toDrilldown = [
@@ -66,6 +74,7 @@ in
     homelab.grafana.drilldown = {
       variables = {
         level = g.levelVariable levels;
+        debug = g.debugSwitch hidden;
         search = g.searchVariable;
       };
       rows.logs = {
@@ -110,6 +119,7 @@ in
       variables = {
         node = g.nodeVariable;
         level = g.levelVariable levels;
+        debug = g.debugSwitch hidden;
         search = g.searchVariable;
       };
       panels = {
@@ -149,6 +159,7 @@ in
       };
     };
     homelab.grafana.overviews.cluster.title = "Cluster";
+    homelab.grafana.overviews.cluster.variables.debug = g.debugSwitch hidden;
     homelab.grafana.overviews.cluster.panels =
       let
         toExplore = [
@@ -166,7 +177,7 @@ in
           panel = g.logVolume {
             title = "Pod logs by level";
             description = "How many lines every container in the cluster wrote, by level";
-            selector = ''{source="pod"}'';
+            selector = ''{source="pod", ${g.hideDebug}}'';
             links = toExplore;
           };
         };
@@ -177,7 +188,7 @@ in
           panel = g.logVolume {
             title = "Pod logs by workload";
             description = "How many lines each workload's containers wrote, every level";
-            selector = ''{source="pod"}'';
+            selector = ''{source="pod", ${g.hideDebug}}'';
             by = "namespace";
             legend = "right";
             links = toExplore;
@@ -227,13 +238,14 @@ in
               }
             ];
             queries = [
-              (g.loki ''sum by (namespace, level) (count_over_time({source="pod"} [$__range]))'' {
+              (g.loki ''sum by (namespace, level) (count_over_time({source="pod", ${g.hideDebug}} [$__range]))'' {
                 instant = true;
               })
             ];
           };
         };
       };
+    homelab.grafana.home.variables.debug = g.debugSwitch hidden;
     homelab.grafana.home.tiles.logs = {
       group = "Logs";
       order = 205;
@@ -241,7 +253,7 @@ in
       panel = g.logVolume {
         title = "Log lines";
         description = "How many lines the pods and the host's journal wrote, by level";
-        selector = ''{source=~".+"}'';
+        selector = ''{source=~".+", ${g.hideDebug}}'';
         legend = "hidden";
         links = [
           {

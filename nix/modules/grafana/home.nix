@@ -14,6 +14,14 @@ let
   tiles = byOrder (lib.mapAttrsToList (name: t: t // { inherit name; }) cfg.tiles);
 in
 {
+  options.homelab.grafana.home.variables = lib.mkOption {
+    description = ''
+      Variables the tiles use, by name, from `lib.grafana.debugSwitch` and the like: modules whose tiles filter on the
+      same variable define it alike.
+    '';
+    type = lib.types.attrsOf (lib.types.attrsOf lib.types.anything);
+    default = { };
+  };
   options.homelab.grafana.home.tiles = lib.mkOption {
     description = ''
       Tiles of the Home dashboard, from the modules' grafana.nix: a panel each, packed onto the grid by `order`. A
@@ -58,6 +66,7 @@ in
         title = "Home";
         description = "The most important values of each part of the homelab; a tile opens its dashboard";
         tags = [ "homelab" ];
+        variables = lib.attrValues config.homelab.grafana.home.variables;
         links = [
           (g.link {
             title = "Dashboards";
