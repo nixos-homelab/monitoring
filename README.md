@@ -175,6 +175,20 @@ not on panels.
 }
 ```
 
+This flake's modules bring their own, each behind `homelab.<module>.alerts.enable` (on with the module and
+alerting):
+
+| Module | Critical | Warning |
+| --- | --- | --- |
+| zfs-exporter | pool not ONLINE, over 90 %, ZED data errors | over 80 %, full within a week, ZED checksum or I/O errors, a vdev leaving ONLINE, no metrics |
+| smartctl-exporter | SMART failed | a disk over 55 °C for 15 minutes, no metrics |
+| systemd-exporter | | a unit failed for 5 minutes |
+| kube-state-metrics | a node NotReady | a container stuck waiting or restarting, a workload short of replicas, a failed Job |
+| alloy | | a scrape target down, kernel I/O errors and OOM kills in the journal |
+
+The ZED rules read ZED's journal lines (`all-syslog.sh`, tagged `zed`) through Loki, so they need ZED logging to
+syslog on the host.
+
 `severity` routes an alert: `critical` and `warning` notify the contact point `homelab.grafana.alerting.notify`
 names for them, `info` only shows in the Firing list on Home. Contact points are Grafana integrations of any type;
 their secrets come from Secrets in Grafana's namespace (`environmentSecrets`), named in the settings as `$NAME`:

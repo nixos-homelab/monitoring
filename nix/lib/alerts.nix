@@ -15,7 +15,7 @@
           lib.mapAttrsToList (
             rule: r:
             map (q: {
-              alert = rule;
+              alert = "${group}-${rule}";
               inherit (q.model) expr;
               inherit (r) for;
             }) (lib.filter (q: q.datasourceUid == self.lib.grafana.mimirUid) r.data)

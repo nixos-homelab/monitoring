@@ -10,7 +10,10 @@ let
   cfg = config.homelab.systemd-exporter;
 in
 {
-  imports = [ self.nixosModules.alloy ] ++ self.lib.importsApply [ ./grafana.nix ];
+  imports = [ self.nixosModules.alloy ] ++ self.lib.importsApply [
+    ./grafana.nix
+    ./alerts.nix
+  ];
   options.homelab.systemd-exporter = {
     enable = lib.mkEnableOption "systemd-exporter";
   };
