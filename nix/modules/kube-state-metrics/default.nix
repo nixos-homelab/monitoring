@@ -58,6 +58,7 @@ in
 {
   imports = [ self.nixosModules.alloy ] ++ self.lib.importsApply [
     ./grafana.nix
+    ./alerts.nix
     ./logs.nix
   ];
   options.homelab.kube-state-metrics = {
