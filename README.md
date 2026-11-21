@@ -41,6 +41,7 @@ For the full list of module options, see [the documentation](https://nixos-homel
   `homelab.grafana.dashboards.<name>` provisions a dashboard (read-only in
   the UI), and `homelab.grafana.homeDashboard` makes one Grafana's home. The modules' tiles
   (`homelab.grafana.home.tiles`) make a Home dashboard, which is the home by default.
+  `homelab.grafana.alerting` provisions alert rules and where they notify (see Alerting below).
 - **mimir**: long-term Prometheus-compatible metrics storage.
 - **loki**: log storage, one binary on its volume, with `homelab.loki.retention` (30 days by default). On, it has
   Alloy ship the logs (see Logs below).
@@ -152,3 +153,48 @@ legacyPackages.screenshots = inputs.homelab-monitoring.lib.screenshots.forDashbo
   };
 };
 ```
+
+## Alerting
+
+Alert rules come with the modules they watch, as dashboards do: a module adds a group named after it to
+`homelab.grafana.alerting.groups`, built with `lib.grafana.alert`. A rule is an instant query against Mimir (or Loki
+with `datasource = "loki"`), its last value per series held against a threshold for a while. Thresholds live in rules,
+not on panels.
+
+```nix
+{ inputs, ... }:
+{
+  homelab.grafana.alerting.groups.zfs.rules.pool-degraded = inputs.homelab-monitoring.lib.grafana.alert {
+    title = "Pool not online";
+    query = ''max by (zpool) (node_zfs_zpool_state{state!="online"})'';
+    above = 0;
+    for = "1m";
+    severity = "critical";
+    summary = "Pool {{ $labels.zpool }} is not online";
+  };
+}
+```
+
+`severity` routes an alert: `critical` and `warning` notify the contact point `homelab.grafana.alerting.notify`
+names for them, `info` only shows in the Firing list on Home. Contact points are Grafana integrations of any type;
+their secrets come from Secrets in Grafana's namespace (`environmentSecrets`), named in the settings as `$NAME`:
+
+```nix
+homelab.grafana.alerting = {
+  contactPoints.phone = [
+    {
+      type = "webhook";
+      settings.url = "$NOTIFY_URL";
+    }
+  ];
+  environmentSecrets = [ "notify" ];
+  notify.critical = "phone";
+  notify.warning = "phone";
+};
+```
+
+Grafana provisions alerting from files at start only and deletes nothing that drops out of them, so an init
+container in its pod compares what this configuration provisions with what Grafana's database says was provisioned
+from files before, and has Grafana delete the difference. Only what carries the module's `hl-` prefix: rules made in
+the UI stay. A change to the alerting restarts Grafana. `lib.alerts.check` runs a configuration's PromQL through
+promtool, and `lib.logs.queries` its LogQL through the pinned Loki.
