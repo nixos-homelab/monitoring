@@ -18,7 +18,34 @@ let
     );
   health = byOrder cfg.health;
   graphs = byOrder (lib.filterAttrs (_: gr: gr.series != { }) cfg.graphs);
-  shown = health != [ ] || graphs != [ ];
+  alerting = config.homelab.grafana.alerting.enable;
+  shown = health != [ ] || graphs != [ ] || alerting;
+
+  # What is firing now, from the rules of homelab.grafana.alerting and any made in the UI
+  alertPanels = lib.optional alerting {
+    w = 24;
+    h = 6;
+    panel = g.alertlist {
+      title = "Firing";
+      description = "Alerts firing or about to (pending), and rules that fail to evaluate; a row opens the rule";
+      options = {
+        viewMode = "list";
+        groupMode = "default";
+        showInstances = true;
+        maxItems = 20;
+        # By importance: firing, then pending, then the rest
+        sortOrder = 3;
+        stateFilter = {
+          firing = true;
+          pending = true;
+          error = true;
+          noData = false;
+          normal = false;
+          recovering = false;
+        };
+      };
+    };
+  };
 
   # Every row green at 100 %, orange below it, red below its `crit`, as overrides of its series by title
   healthOverrides = map (
@@ -444,7 +471,7 @@ in
             tags = [ "homelab" ];
           })
         ];
-        layout = g.pack (healthPanels ++ map graphPanel graphs);
+        layout = g.pack (alertPanels ++ healthPanels ++ map graphPanel graphs);
       };
     };
   };

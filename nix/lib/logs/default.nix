@@ -1,5 +1,5 @@
 # lib.logs.check: the log pipeline of an evaluated configuration on its examples, with the pinned Alloy and Loki.
-# lib.logs.queries: the LogQL queries of its dashboards, through the pinned Loki
+# lib.logs.queries: the LogQL queries of its dashboards and alert rules, through the pinned Loki
 {
   self,
   inputs,
@@ -87,7 +87,8 @@
         touch $out
       '';
 
-  # Every LogQL query of a configuration's dashboards (config.homelab.grafana.dashboards), its variables filled in as
+  # Every LogQL query of a configuration's alert rules (config.homelab.grafana.alerting.groups), which Loki has to take
+  # as a metric query, and of its dashboards (config.homelab.grafana.dashboards), its variables filled in as
   # Grafana would, on lines pushed to the pinned Loki: a line at each level for each of `streams` (label sets) and
   # for a picked workload, another workload, the picked node's journal and another node's. A query Loki refuses, a
   # metric query with no series, or a log query that misses a matched stream's line or returns the streams the
@@ -118,6 +119,20 @@
           )
         );
         streams = pkgs.writeText "streams.json" (builtins.toJSON streams);
+        rules = pkgs.writeText "rules.json" (
+          builtins.toJSON (
+            lib.concatMap (
+              g:
+              lib.concatMap (
+                rule:
+                map (q: {
+                  inherit (rule) title;
+                  inherit (q.model) expr;
+                }) (lib.filter (q: q.datasourceUid == self.lib.grafana.lokiUid) rule.data)
+              ) (lib.attrValues g.rules)
+            ) (lib.attrValues (config.homelab.grafana.alerting.groups or { }))
+          )
+        );
         lokiConfig = pkgs.writeText "loki.json" (builtins.toJSON config.homelab.loki.config);
       }
       ''
@@ -126,7 +141,7 @@
         for layer in $(jq -r '.[0].Layers[]' image/manifest.json); do
           tar -xf "image/$layer" -C root --no-same-owner --no-same-permissions --exclude='dev/*'
         done
-        python3 ${./queries.py} "$PWD/root" "$dashboards" "$streams" "$lokiConfig" "$PWD/work"
+        python3 ${./queries.py} "$PWD/root" "$dashboards" "$streams" "$lokiConfig" "$rules" "$PWD/work"
         touch $out
       '';
 }

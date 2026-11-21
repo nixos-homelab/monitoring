@@ -127,6 +127,7 @@ in
     ./services.nix
     ./homepage.nix
     ./metrics.nix
+    ./alerting.nix
   ];
   config = lib.mkIf cfg.enable {
     homelab.cluster.images = builtins.attrValues images;

@@ -1,15 +1,19 @@
-# The pinned Grafana provisions the dashboards of a rendered payload: grafana.py runs the image's own binary on the
-# files the manifest gives the pod, in the build sandbox, against sqlite
+# The pinned Grafana provisions the dashboards and the alerting of a rendered payload: grafana.py runs the image's own
+# binary on the files the manifest gives the pod, in the build sandbox, against a PostgreSQL of its own, the alerting's
+# init container included
 {
   pkgs,
   image,
   payload,
+  postgresql,
 }:
 pkgs.runCommand "check-grafana"
   {
     nativeBuildInputs = [
       pkgs.gnutar
       pkgs.jq
+      pkgs.bash
+      postgresql
       (pkgs.python3.withPackages (p: [ p.pyyaml ]))
     ];
   }

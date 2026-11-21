@@ -532,6 +532,113 @@ in
 {
   inherit mimirUid lokiUid legends ratioExpr;
 
+  # An alert rule for `homelab.grafana.alerting.groups.<group>.rules.<name>`: an instant query against Mimir (PromQL)
+  # or Loki (LogQL, `datasource = "loki"`), each series reduced to its last value, firing while that is above or below
+  # the threshold for `for`. The threshold lives here, not on a panel. `severity` routes it: "critical" and "warning"
+  # notify through `homelab.grafana.alerting.notify`, "info" only shows on Home. Annotations reach Grafana as written,
+  # Go templates (`{{ $labels.pool }}`, `{{ $value }}`) included
+  alert =
+    {
+      title,
+      query,
+      severity,
+      summary,
+      above ? null,
+      below ? null,
+      for ? "5m",
+      description ? null,
+      datasource ? "mimir",
+      # Seconds of data before the evaluation the query may look at
+      range ? 600,
+      # What a query without series means: "OK" (nothing wrong), "NoData", "Alerting", "KeepLast"
+      noData ? "OK",
+      execErr ? "Error",
+      dashboardUid ? null,
+      panelId ? null,
+      labels ? { },
+    }:
+    assert lib.assertMsg (
+      (above == null) != (below == null)
+    ) "lib.grafana.alert ${title}: give exactly one of above and below";
+    assert lib.assertMsg (builtins.elem severity [
+      "critical"
+      "warning"
+      "info"
+    ]) "lib.grafana.alert ${title}: severity is critical, warning or info, not ${severity}";
+    let
+      relativeTimeRange = {
+        from = range;
+        to = 0;
+      };
+      serverSide = refId: model: {
+        inherit refId relativeTimeRange;
+        datasourceUid = "__expr__";
+        model = model // {
+          inherit refId;
+          datasource = {
+            type = "__expr__";
+            uid = "__expr__";
+          };
+        };
+      };
+    in
+    compact {
+      inherit title dashboardUid panelId;
+      condition = "C";
+      data = [
+        {
+          refId = "A";
+          inherit relativeTimeRange;
+          datasourceUid = if datasource == "loki" then lokiUid else mimirUid;
+          model = {
+            refId = "A";
+            expr = query;
+          }
+          // (
+            if datasource == "loki" then
+              { queryType = "instant"; }
+            else
+              {
+                instant = true;
+                range = false;
+              }
+          );
+        }
+        (serverSide "B" {
+          type = "reduce";
+          expression = "A";
+          reducer = "last";
+          settings.mode = "dropNN";
+        })
+        (serverSide "C" {
+          type = "threshold";
+          expression = "B";
+          conditions = [
+            {
+              evaluator =
+                if above != null then
+                  {
+                    type = "gt";
+                    params = [ above ];
+                  }
+                else
+                  {
+                    type = "lt";
+                    params = [ below ];
+                  };
+            }
+          ];
+        })
+      ];
+      inherit for;
+      noDataState = noData;
+      execErrState = execErr;
+      annotations = compact { inherit summary description; };
+      labels = labels // {
+        inherit severity;
+      };
+    };
+
   # A container query (one with a `namespace` label) summed by the area of its namespace, from
   # homelab.grafana.home.areas, a namespace in none as `other`: for "{{area}}" legends
   byArea =
@@ -851,6 +958,8 @@ in
   statusHistory = panel "status-history";
   piechart = panel "piechart";
   barchart = panel "barchart";
+  # Alert rules and their state; the options pick which (stateFilter, folder, maxItems, ...)
+  alertlist = panel "alertlist";
   heatmap = panel "heatmap";
 
   # A table column's look, as an override of the field it shows: its unit, its levels or thresholds, value mappings,

@@ -1,4 +1,4 @@
-"""Runs every LogQL query of the dashboards against the pinned Loki.
+"""Runs every LogQL query of the dashboards and the alert rules against the pinned Loki.
 
 Loki gets a line at every level for each stream: the given ones, and those the variables below pick or don't. Each
 query then runs with its variables filled in: a metric query must give series, a log query every level's line of
@@ -19,8 +19,10 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-loki_root, dashboards_file, streams_file, loki_config_file, work = sys.argv[1:]
+loki_root, dashboards_file, streams_file, loki_config_file, rules_file, work = sys.argv[1:]
 dashboards = json.load(open(dashboards_file))
+# The LogQL alert rules: [ { title; expr } ]
+rules = json.load(open(rules_file))
 os.makedirs(work, exist_ok=True)
 
 # What each variable is set to, as Grafana interpolates it: multi-value regex variables at their "All" value
@@ -219,6 +221,17 @@ for board, resource in sorted(dashboards.items()):
                 fail(f"{what}: series of levels the debug switch leaves out: {[r['metric'] for r in result['result']]}")
             print(f"ok: {what}")
             checked += 1
+
+# An alert rule's query needs no series from the lines pushed, it fires on what they don't have: Loki has to take it,
+# as the metric query an alert evaluates
+for rule in rules:
+    what = f"alert {rule['title']}: {rule['expr']}"
+    status, body = request("/loki/api/v1/query", {"query": rule["expr"], "time": str(now)})
+    if status != 200:
+        fail(f"{what}: {status} {body.decode().strip()}")
+    if json.loads(body)["data"]["resultType"] != "vector":
+        fail(f"{what}: not a metric query")
+    print(f"ok: {what}")
 
 loki.kill()
 if checked == 0:

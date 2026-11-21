@@ -65,6 +65,8 @@
             logs = import ./nix/lib/logs { inherit self inputs lib; };
             # Dashboard builders for homelab.grafana.dashboards
             grafana = import ./nix/lib/grafana.nix { inherit lib; };
+            # The PromQL of the alert rules through promtool
+            alerts = import ./nix/lib/alerts.nix { inherit self lib; };
             # Screenshots of dashboards on generated samples, for working on their layout
             screenshots = import ./nix/lib/screenshots { inherit self inputs lib; };
           };
@@ -102,6 +104,9 @@
                 grafana.dashboards.check.dashboard = import ./nix/checks/dashboard.nix {
                   inherit (self.lib) grafana;
                 };
+                # Rules through the builder for both datasources and a contact point notified of critical alerts;
+                # the check drops the last rule and expects the prune to delete it
+                grafana.alerting = import ./nix/checks/alerting.nix { inherit (self.lib) grafana; };
               };
             };
             manifests = inputs.homelab-shared.lib.checks.manifests {
@@ -143,8 +148,14 @@
               image =
                 (inputs.homelab-shared.lib.images.pinned pkgs ./nix/modules/grafana/Dockerfile)."grafana/grafana";
               payload = manifests.passthru.manifests;
+              postgresql = machine.config.homelab.postgresql.image.package;
             };
-            # Every LogQL query of the dashboards through the pinned Loki
+            # The alert rules' PromQL through promtool
+            checks.promql = self.lib.alerts.check {
+              inherit pkgs;
+              inherit (machine) config;
+            };
+            # Every LogQL query of the dashboards and the alert rules through the pinned Loki
             checks.logql = self.lib.logs.queries {
               inherit pkgs;
               inherit (machine) config;
