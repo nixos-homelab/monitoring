@@ -9,6 +9,16 @@
 let
   g = self.lib.grafana;
   n = ''node="$node"'';
+  # A switch or rollback on a host: the generation its system profile points at changed (default.nix writes it)
+  deploys =
+    selector:
+    g.annotation {
+      name = "Deploys";
+      expr = "changes(nixos_system_generation{${selector}}[2m]) > 0";
+      color = "purple";
+      title = "Deploy";
+      text = "A NixOS generation went live";
+    };
   disks = ''device=~"sd.+|nvme.+"'';
   # Physical interfaces: not the loopback, the pods' veths, Cilium's or WireGuard's
   nics = ''device!~"lo|veth.*|lxc.*|cilium.*|wg.*|kube.*"'';
@@ -82,6 +92,7 @@ in
       title = "Reboot";
       text = "The NAS booted";
     };
+    homelab.grafana.home.annotations.deploys = deploys "";
     homelab.grafana.home.graphs = {
       # What the containers don't account for: k3s, ZFS, the kernel, the host's own services
       cpu.series.host = {
@@ -150,6 +161,7 @@ in
         title = "Reboot";
         text = "The NAS booted";
       };
+      annotations.deploys = deploys n;
       panels = {
         cpu = panel 10 3 4 (
           g.stat {

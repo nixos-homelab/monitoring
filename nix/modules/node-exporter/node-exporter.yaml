@@ -28,6 +28,7 @@ spec:
         - --path.procfs=/host/proc
         - --path.sysfs=/host/sys
         - --no-collector.mdadm
+        - --collector.textfile.directory=/host/textfile
         securityContext:
           readOnlyRootFilesystem: true
         livenessProbe:
@@ -46,6 +47,9 @@ spec:
         - name: sys
           mountPath: /host/sys
           readOnly: true
+        - name: textfile
+          mountPath: /host/textfile
+          readOnly: true
       volumes:
       - name: proc
         hostPath:
@@ -53,3 +57,7 @@ spec:
       - name: sys
         hostPath:
           path: /sys
+      - name: textfile
+        hostPath:
+          path: /run/node-exporter
+          type: DirectoryOrCreate
