@@ -1,5 +1,6 @@
-# Alerting for the checks: rules through lib.grafana.alert against both datasources, and a contact point the critical
-# ones go to. The grafana check drops the last rule and expects the init container to delete it
+# Alerting for the checks: rules through lib.grafana.alert against both datasources, a contact point the critical ones
+# go to and one for warnings from a variable of a Secret. The grafana check drops the last rule and expects the init
+# container to delete it, and runs without the variable first, expecting the second contact point left out
 { grafana }:
 {
   groups.check.rules = {
@@ -38,5 +39,13 @@
       };
     }
   ];
+  contactPoints.check-secret = [
+    {
+      type = "webhook";
+      settings.url = "$CHECK_NOTIFY_URL";
+    }
+  ];
+  environmentSecrets = [ "check-notify" ];
   notify.critical = "check";
+  notify.warning = "check-secret";
 }

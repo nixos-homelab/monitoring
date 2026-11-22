@@ -207,6 +207,11 @@ homelab.grafana.alerting = {
 };
 ```
 
+Grafana starts without those Secrets. Until a variable is set, the init container leaves out the integrations that
+name it, and the routes to a contact point left without integrations, so those alerts go nowhere. Grafana reads the
+variables only when it starts: the setup-secrets destination writing a Secret restarts it with
+`restart = [ "deployment/grafana" ]`.
+
 Grafana's default notification lists every label, query value and link. The module provisions shorter texts,
 `homelab.grafana.alerting.messages`: `title` (the alert's name, how many fire, whether they resolved) and `message`
 (each alert's summary and description, in HTML), for the settings of an integration that takes them:

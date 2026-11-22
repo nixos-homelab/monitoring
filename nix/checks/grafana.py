@@ -1,7 +1,8 @@
 """Runs the pinned Grafana image's own binary on the files the rendered manifest gives its pod, against a PostgreSQL of
 its own, and checks that it provisions every dashboard (the folders, the home dashboard, each dashboard against the
-schema of its version) and the alerting: the rules, contact points and policy, and that the init container's prune
-deletes a rule dropped from the configuration while a rule made through the API stays.
+schema of its version) and the alerting: the rules, contact points and policy, that the init container leaves out a
+contact point whose variable is unset and its route until it is set, and that its prune deletes a rule dropped from the
+configuration while a rule made through the API stays.
 
 Usage: grafana.py ROOT MANIFEST WORKDIR, ROOT being the unpacked image, MANIFEST the payload's grafana.yaml, with
 PostgreSQL's binaries and bash on PATH.
@@ -141,8 +142,9 @@ def stop():
     grafana.wait(timeout=30)
 
 
-def run_prune():
-    """The init container's script, its paths under the work directory, against the check's PostgreSQL"""
+def run_prune(variables=None):
+    """The init container's script, its paths under the work directory, against the check's PostgreSQL, with the
+    variables of its Secrets"""
     script = prune["command"][-1].replace("/etc/grafana", inside("/etc/grafana"))
     result = subprocess.run(
         ["bash", "-c", script],
@@ -152,7 +154,8 @@ def run_prune():
             "PGPORT": str(pgport),
             "PGUSER": "grafana",
             "PGDATABASE": "grafana",
-        },
+        }
+        | (variables or {}),
         capture_output=True,
         text=True,
         timeout=60,
@@ -160,6 +163,17 @@ def run_prune():
     if result.returncode != 0:
         fail(f"the alerting-prune init container failed: {result.stderr}")
     return json.load(open(inside("/etc/grafana/provisioning/alerting/zz-delete.json")))
+
+
+def check_provisioned(points_want, routes_want):
+    status, points = request("/api/v1/provisioning/contact-points")
+    have = {p["uid"] for p in points}
+    if not points_want <= have:
+        fail(f"contact points {sorted(points_want - have)} missing")
+    status, policy = request("/api/v1/provisioning/policies")
+    if [r.get("receiver") for r in policy.get("routes", [])] != routes_want:
+        fail(f"the policy tree is {policy}, not routes to {routes_want}")
+    return have
 
 
 def request(path, body=None, headers=None):
@@ -261,15 +275,16 @@ if prune:
         if status != 200 or body.get("provenance") != "file":
             fail(f"rule {uid}: {status} {body}")
     print(f"ok: {len(uids)} rules provisioned")
-    status, points = request("/api/v1/provisioning/contact-points")
+    # Without the Secret: the contact point of its variable left out, with its route
+    unset = {r["uid"] for cp in alerting["contactPoints"] if cp["name"] == "check-secret" for r in cp["receivers"]}
     want = {r["uid"] for cp in alerting["contactPoints"] for r in cp["receivers"]}
-    have = {p["uid"] for p in points}
-    if not want <= have:
-        fail(f"contact points {sorted(want - have)} missing")
-    status, policy = request("/api/v1/provisioning/policies")
-    if [r.get("receiver") for r in policy.get("routes", [])] != [r["receiver"] for r in alerting["policies"][0]["routes"]]:
-        fail(f"the policy tree is {policy}")
-    print("ok: contact points and the policy tree provisioned")
+    routes = [r["receiver"] for r in alerting["policies"][0]["routes"]]
+    if not unset or "check-secret" not in routes:
+        fail("the check's alerting has no contact point from a variable")
+    have = check_provisioned(want - unset, [r for r in routes if r != "check-secret"])
+    if have & unset:
+        fail(f"contact points {sorted(have & unset)} provisioned with their variable unset")
+    print("ok: contact points and the policy tree provisioned, the one of an unset variable left out")
 
     # The notification templates, and what they make of an alert
     status, body = request("/api/v1/provisioning/templates/hl-messages")
@@ -309,10 +324,15 @@ if prune:
     for name, content in (("homelab.json", alerting), ("keep.json", keep)):
         with open(inside(f"/etc/grafana/alerting/{name}"), "w") as f:
             json.dump(content, f)
-    deletes = run_prune()
+    # The Secret exists by now, and Grafana restarted for it
+    variables = {"CHECK_NOTIFY_URL": "http://127.0.0.1:9/secret"}
+    deletes = run_prune(variables)
     if [d["uid"] for d in deletes["deleteRules"]] != [dropped] or deletes["deleteContactPoints"] or deletes["deleteMuteTimes"] or deletes["deleteTemplates"]:
         fail(f"the prune should delete {dropped} only, it wrote {deletes}")
+    env.update(variables)
     start()
+    check_provisioned(want, routes)
+    print("ok: the contact point of the variable and its route provisioned once it is set")
     if request(f"/api/v1/provisioning/alert-rules/{dropped}")[0] != 404:
         fail(f"rule {dropped} survived its removal")
     for uid in uids[:-1] + ["hl-check-manual"]:
