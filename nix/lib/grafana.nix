@@ -1118,6 +1118,32 @@ in
   # Grafana itself compacts a dashboard: [ { panel; w; h; } ]
   pack = packBelow 0;
 
+  # As `pack`, each item then widened into the free columns to its right, so a row its items don't fill ends flush
+  packFill =
+    items:
+    let
+      layout = packBelow 0 items;
+      placed = lib.imap0 (i: item: { inherit i item; }) layout.spec.items;
+      widen =
+        p:
+        let
+          s = p.item.spec;
+          blocked =
+            c:
+            lib.any (
+              o:
+              o.i != p.i
+              && o.item.spec.x <= c
+              && c < o.item.spec.x + o.item.spec.width
+              && o.item.spec.y < s.y + s.height
+              && s.y < o.item.spec.y + o.item.spec.height
+            ) placed;
+          grow = w: if s.x + w < 24 && !blocked (s.x + w) then grow (w + 1) else w;
+        in
+        lib.recursiveUpdate p.item { spec.width = grow s.width; };
+    in
+    lib.recursiveUpdate layout { spec.items = map widen placed; };
+
   inherit packBelow;
 
   # Tiles in strips of up to `perRow`, the tiles of a strip sharing its 24 columns, the last tile taking what's left:

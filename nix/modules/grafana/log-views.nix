@@ -270,9 +270,9 @@ in
         };
         overrides = g.levelColors;
         queryOptions.maxDataPoints = 120;
-        order = 300;
-        w = 15;
-        h = 7;
+        order = 207;
+        w = 11;
+        h = 9;
         links = toCluster;
         series.lines.query = g.loki ''sum by (level) (count_over_time({source=~".+", ${g.hideDebug}} [$__auto]))'' {
           legend = "{{level}}";
@@ -286,9 +286,9 @@ in
         options.displayLabels = [ "name" ];
         # One point over the whole range, so the legend formats apply
         queryOptions.maxDataPoints = 1;
-        order = 310;
-        w = 9;
-        h = 7;
+        order = 208;
+        w = 7;
+        h = 9;
         links = toCluster;
         series = {
           pods = {
