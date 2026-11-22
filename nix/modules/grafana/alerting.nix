@@ -114,6 +114,12 @@ let
     ];
   };
   provisioningJSON = builtins.toJSON provisioning;
+  environmentSecrets = map (name: {
+    secretRef = {
+      inherit name;
+      optional = true;
+    };
+  }) cfg.environmentSecrets;
   # What this configuration provisions, as [ record_type record_key ] of Grafana's provenance_type rows
   keep = builtins.toJSON (
     map (r: [
@@ -138,16 +144,31 @@ let
     copyToRoot = [
       pkgs.bash
       pkgs.coreutils
+      pkgs.jq
       config.homelab.postgresql.image.package
     ];
   };
   # The provisioning plus the delete file: the provenance rows with the prefix minus what is provisioned now. A
   # database Grafana hasn't migrated yet has no provenance_type, and nothing to delete. Exported for the check, which
-  # runs it against its own PostgreSQL
+  # runs it against its own PostgreSQL.
+  #
+  # Grafana refuses to start on an integration it can't validate, which an empty setting is to most of them, and
+  # expands a setting's `$NAME` and `${NAME}` to nothing while the variable is unset (`$$` is a `$`, `$__name{...}` an
+  # expander of its own). So the integrations naming one unset or empty here are left out, and so are a contact point
+  # left without integrations and the routes to it: alerts that went there end in the muted catch-all
   prune = ''
     set -euo pipefail
     until psql --no-psqlrc -Xq -c "" 2>/dev/null; do sleep 2; done
-    cp ${sourceDir}/homelab.json ${provisioningDir}/homelab.json
+    jq '
+      def unset: [.. | strings | split("$$")[] | scan("\\$\\{?([A-Za-z_][A-Za-z0-9_]*)") | .[0]
+        | select((startswith("__") | not) and ($ENV[.] // "") == "")] != [];
+      .contactPoints |= map(.receivers |= map(select(.settings | unset | not)) | select(.receivers != []))
+      | (.contactPoints | map(.name)) as $names
+      | .policies[].routes |= map(select(.receiver as $r | $names | any(. == $r)))
+    ' ${sourceDir}/homelab.json >${provisioningDir}/homelab.json
+    jq -r --slurpfile now ${provisioningDir}/homelab.json \
+      '[.contactPoints[].receivers[].uid] - [$now[0].contactPoints[].receivers[].uid] | .[]
+        | "Left out \(.): a variable its settings name is unset"' ${sourceDir}/homelab.json >&2
     exists=$(psql --no-psqlrc -XAtq -v ON_ERROR_STOP=1 -c "SELECT to_regclass('provenance_type') IS NOT NULL")
     if [[ $exists != t ]]; then
       printf '{"apiVersion": 1}\n' >${provisioningDir}/zz-delete.json
@@ -217,7 +238,8 @@ in
       description = ''
         Where notifications go: each contact point a list of Grafana integrations (email, webhook, telegram, pushover,
         ...). Secrets stay out of here: a setting can name an environment variable as `$NAME`, which Grafana expands
-        from `environmentSecrets`.
+        from `environmentSecrets`. An integration naming one that is unset is left out until it is set, and the routes
+        to a contact point left without integrations with it.
       '';
       type = lib.types.attrsOf (
         lib.types.listOf (
@@ -256,7 +278,8 @@ in
     environmentSecrets = lib.mkOption {
       description = ''
         Secrets in Grafana's namespace whose keys reach Grafana as environment variables, for the settings of
-        `contactPoints`. Grafana waits for them to exist.
+        `contactPoints`. Grafana starts without them, leaving out the integrations they are for, and reads them only
+        when it starts: restart it when one is written (`restart` of homelab-shared's `kubeSecretDestination`).
       '';
       type = lib.types.listOf lib.types.str;
       default = [ ];
@@ -352,7 +375,7 @@ in
       ];
     homelab.kubernetes.submodules.instances.grafana = {
       args.container = {
-        envFrom = map (name: { secretRef.name = name; }) cfg.environmentSecrets;
+        envFrom = environmentSecrets;
         volumeMounts.${provisioningDir} = {
           name = "alerting";
           readOnly = true;
@@ -377,6 +400,7 @@ in
                 "-c"
                 prune
               ];
+              envFrom = environmentSecrets;
               env = {
                 PGHOST.value = "postgresql.postgresql";
                 PGCONNECT_TIMEOUT.value = "5";

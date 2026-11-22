@@ -207,6 +207,11 @@ homelab.grafana.alerting = {
 };
 ```
 
+Grafana starts without those Secrets. Until a variable is set, the init container leaves out the integrations that
+name it, and the routes to a contact point left without integrations, so those alerts go nowhere. Grafana reads the
+variables only when it starts: the setup-secrets destination writing a Secret restarts it with
+`restart = [ "deployment/grafana" ]`.
+
 Grafana provisions alerting from files at start only and deletes nothing that drops out of them, so an init
 container in its pod compares what this configuration provisions with what Grafana's database says was provisioned
 from files before, and has Grafana delete the difference. Only what carries the module's `hl-` prefix: rules made in
