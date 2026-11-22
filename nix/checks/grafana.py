@@ -286,6 +286,26 @@ if prune:
         fail(f"contact points {sorted(have & unset)} provisioned with their variable unset")
     print("ok: contact points and the policy tree provisioned, the one of an unset variable left out")
 
+    # The notification templates, and what they make of an alert
+    status, body = request("/api/v1/provisioning/templates/hl-messages")
+    if status != 200 or body.get("provenance") != "file":
+        fail(f"template hl-messages: {status} {body}")
+    sample = {
+        "labels": {"alertname": "Pool degraded", "severity": "critical"},
+        "annotations": {"summary": "Pool tank is not online", "description": "zpool status tank"},
+    }
+    rendered = {}
+    for name in ("hl.title", "hl.message"):
+        test = {"name": "hl-messages", "template": body["template"] + '{{ define "check" }}{{ template "' + name + '" . }}{{ end }}', "alerts": [sample]}
+        status, out = request("/api/alertmanager/grafana/config/api/v1/templates/test", json.dumps(test).encode())
+        results = {r["name"]: r["text"] for r in (out or {}).get("results") or []}
+        if status != 200 or "check" not in results:
+            fail(f"rendering {name}: {status} {out}")
+        rendered[name] = results["check"].strip()
+    if rendered != {"hl.title": "Pool degraded", "hl.message": "Pool tank is not online\n<i>zpool status tank</i>"}:
+        fail(f"the templates render {rendered}")
+    print(f"ok: templates render {rendered}")
+
     # A rule made outside the files, with the prefix and without provenance, as one made in the UI: the prune keeps it
     manual = dict(alerting["groups"][0]["rules"][0], uid="hl-check-manual", title="Made by hand")
     manual.update(folderUID=request("/api/folders")[1][0]["uid"], ruleGroup="manual", orgID=1)
@@ -307,7 +327,7 @@ if prune:
     # The Secret exists by now, and Grafana restarted for it
     variables = {"CHECK_NOTIFY_URL": "http://127.0.0.1:9/secret"}
     deletes = run_prune(variables)
-    if [d["uid"] for d in deletes["deleteRules"]] != [dropped] or deletes["deleteContactPoints"] or deletes["deleteMuteTimes"]:
+    if [d["uid"] for d in deletes["deleteRules"]] != [dropped] or deletes["deleteContactPoints"] or deletes["deleteMuteTimes"] or deletes["deleteTemplates"]:
         fail(f"the prune should delete {dropped} only, it wrote {deletes}")
     env.update(variables)
     start()

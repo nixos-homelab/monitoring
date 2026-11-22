@@ -21,10 +21,11 @@ let
   alerting = config.homelab.grafana.alerting.enable;
   shown = health != [ ] || graphs != [ ] || alerting;
 
-  # What is firing now, from the rules of homelab.grafana.alerting and any made in the UI
+  # What is firing now, from the rules of homelab.grafana.alerting and any made in the UI: a column on the right, beside
+  # the health and the first row of graphs
   alertPanels = lib.optional alerting {
-    w = 24;
-    h = 6;
+    w = 6;
+    h = 16;
     panel = g.alertlist {
       title = "Firing";
       description = "Alerts firing or about to (pending), and rules that fail to evaluate; a row opens the rule";
@@ -82,7 +83,7 @@ let
   ];
   healthPanels = lib.optionals (health != [ ]) [
     {
-      w = 20;
+      w = if alerting then 14 else 20;
       h = 7;
       panel = g.statusHistory {
         title = "Subsystem health";
@@ -471,7 +472,7 @@ in
             tags = [ "homelab" ];
           })
         ];
-        layout = g.pack (alertPanels ++ healthPanels ++ map graphPanel graphs);
+        layout = g.pack (healthPanels ++ alertPanels ++ map graphPanel graphs);
       };
     };
   };

@@ -32,7 +32,11 @@
   contactPoints.check = [
     {
       type = "webhook";
-      settings.url = "http://127.0.0.1:9/notify";
+      settings = {
+        url = "http://127.0.0.1:9/notify";
+        title = ''{{ template "hl.title" . }}'';
+        message = ''{{ template "hl.message" . }}'';
+      };
     }
   ];
   contactPoints.check-secret = [

@@ -169,6 +169,9 @@ in
               name = "postgresql-password";
               key = "password";
             };
+            # The address links in notifications and on shared pages start with, in place of localhost:3000: the
+            # workload's Gateway hostname, its name under the workloads' domain
+            GF_SERVER_ROOT_URL.value = "https://grafana.${config.homelab.workloads.domain}/";
           }
           // lib.optionalAttrs (cfg.homeDashboard != null) {
             GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH.value = "${

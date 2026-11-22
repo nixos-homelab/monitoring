@@ -212,6 +212,22 @@ name it, and the routes to a contact point left without integrations, so those a
 variables only when it starts: the setup-secrets destination writing a Secret restarts it with
 `restart = [ "deployment/grafana" ]`.
 
+Grafana's default notification lists every label, query value and link. The module provisions shorter texts,
+`homelab.grafana.alerting.messages`: `title` (the alert's name, how many fire, whether they resolved) and `message`
+(each alert's summary and description, in HTML), for the settings of an integration that takes them:
+
+```nix
+contactPoints.phone = [
+  {
+    type = "pushover";
+    settings = {
+      userKey = "$PUSHOVER_USER_KEY";
+      apiToken = "$PUSHOVER_TOKEN";
+    } // config.homelab.grafana.alerting.messages;
+  }
+];
+```
+
 Grafana provisions alerting from files at start only and deletes nothing that drops out of them, so an init
 container in its pod compares what this configuration provisions with what Grafana's database says was provisioned
 from files before, and has Grafana delete the difference. Only what carries the module's `hl-` prefix: rules made in
