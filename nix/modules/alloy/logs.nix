@@ -732,12 +732,13 @@ in
         description = ''
           Regular expressions (RE2) for secrets in log lines, of pods and the journal alike: each capture group is
           replaced with `replacement` before the line is parsed. The defaults catch API keys, tokens and passwords in
-          URL queries (`?apikey=...`, the way the *Arr apps log their requests) and in `X-Api-Key` and `X-Plex-Token`
+          URL queries (`?apikey=...`, the way the *Arr apps log their requests, and `&api=...` in RSS feed URLs as
+          SABnzbd logs them) and in `X-Api-Key` and `X-Plex-Token`
           headers.
         '';
         type = lib.types.listOf lib.types.str;
         default = [
-          "(?i)[?&](?:api_?key|api_?token|access_token|token|x-plex-token|passkey|password|pass)=([^&\\s\"']+)"
+          "(?i)[?&](?:api|api_?key|api_?token|access_token|token|x-plex-token|passkey|password|pass)=([^&\\s\"']+)"
           "(?i)\\bx-(?:api-key|plex-token): *([^\\s\"']+)"
         ];
       };
@@ -877,6 +878,7 @@ in
               lines = [
                 ''ts=2026-11-19T04:55:02Z level=warn msg="GET http://prowlarr.prowlarr:9696/6/api?t=tvsearch&apikey=0123456789abcdef0123456789abcdef&offset=0: 429"''
                 ''ts=2026-11-19T04:55:03Z level=warn msg="request with X-Plex-Token: abcDEF123 failed"''
+                ''ts=2026-11-22T19:20:01Z level=info msg="fetched https://rss.example.org/rss.php?user=me&api=SRVxABCdef123&del=1"''
               ];
               expect = [
                 {
@@ -886,6 +888,10 @@ in
                 {
                   message = "request with X-Plex-Token: (removed) failed";
                   level = "warning";
+                }
+                {
+                  message = "fetched https://rss.example.org/rss.php?user=me&api=(removed)&del=1";
+                  level = "info";
                 }
               ];
             }
