@@ -302,7 +302,8 @@ in
     };
     graphs = lib.mkOption {
       description = ''
-        The panels below the health, packed onto the grid by `order`, each shown while it has series. Several modules
+        The panels below the health, packed onto the grid by `order` (each in the highest free spot, then widened into free
+        columns to its right), each shown while it has series. Several modules
         can feed one graph: one defines it (title, unit, ...), and each adds its `series`. A series' legend is its name
         unless its query says otherwise.
       '';
@@ -447,7 +448,7 @@ in
         fillOpacity = 0;
         axisSoftMin = 25;
       };
-      order = 120;
+      order = 203;
       w = 6;
       h = 9;
       links = [
@@ -472,7 +473,10 @@ in
             tags = [ "homelab" ];
           })
         ];
-        layout = g.pack (healthPanels ++ alertPanels ++ map graphPanel graphs);
+        # The graphs' orders close both layouts up: CPU and memory beside the Firing column, network, temperatures and
+        # the pools over disk throughput below, then the logs with the library over WAN on the right. Without the
+        # column, temperatures takes its place and the library and WAN move up, and the complaints widen to the edge
+        layout = g.packFill (healthPanels ++ alertPanels ++ map graphPanel graphs);
       };
     };
   };

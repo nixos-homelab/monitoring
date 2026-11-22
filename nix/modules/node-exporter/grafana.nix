@@ -130,7 +130,7 @@ in
           placement = "right";
           calcs = [ "mean" ];
         };
-        order = 220;
+        order = 206;
         w = 9;
         h = 5;
         queryOptions.maxDataPoints = 200;

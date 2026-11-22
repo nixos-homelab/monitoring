@@ -98,7 +98,7 @@ in
       max = 1;
       decimals = 0;
       thresholds = fill.steps;
-      order = 210;
+      order = 205;
       w = 9;
       h = 4;
       links = toNas;
