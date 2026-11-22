@@ -2,10 +2,10 @@
 # points a configuration gives, and the notification policy routing them by severity.
 #
 # Grafana provisions alerting from files at start only, and never deletes what drops out of a file, only what a
-# file's `deleteRules` (`deleteContactPoints`, `deleteMuteTimes`) names. Its database keeps the index of what was
-# provisioned: a `provenance_type` row of provenance `file` per rule, contact point and mute timing. So an init
-# container diffs those rows against what this configuration provisions and writes the delete file, before Grafana
-# starts. Only rows with the `hl-` prefix this module gives everything: rules made in the UI have no provenance and
+# file's `deleteRules` (`deleteContactPoints`, `deleteMuteTimes`, `deleteTemplates`) names. Its database keeps the
+# index of what was provisioned: a `provenance_type` row of provenance `file` per rule, contact point, mute timing and
+# notification template. So an init container diffs those rows against what this configuration provisions and writes
+# the delete file, before Grafana starts. Only rows with the `hl-` prefix this module gives everything: rules made in the UI have no provenance and
 # rules from other files no prefix. A checksum of the provisioning on the pod template restarts Grafana when it
 # changes.
 { self, ... }:
@@ -27,6 +27,19 @@ let
   # reserved domain, which the mute keeps Grafana from ever sending
   muted = "muted";
   always = "hl-always";
+  # Notification texts a contact point can use (`messages`): a short title and the summaries of the alerts, in place
+  # of Grafana's default of every label, value and link. Pushover and others take HTML
+  templates = "hl-messages";
+  messageTemplate = ''
+    {{ define "hl.title" }}{{ .CommonLabels.alertname }}{{ if gt (len .Alerts.Firing) 1 }} ({{ len .Alerts.Firing }}){{ end }}{{ if eq .Status "resolved" }} resolved{{ end }}{{ end }}
+
+    {{ define "hl.message" }}{{ range .Alerts.Firing }}{{ or .Annotations.summary .Labels.alertname }}{{ with .Annotations.description }}
+    <i>{{ . }}</i>{{ end }}
+    {{ end }}{{ with .Alerts.Resolved }}{{ if $.Alerts.Firing }}
+    {{ end }}<b>Resolved</b>
+    {{ range . }}{{ or .Annotations.summary .Labels.alertname }}
+    {{ end }}{{ end }}{{ end }}
+  '';
 
   ruleUid = group: name: "hl-${group}-${name}";
   integrationUid = name: i: "hl-cp-${name}-${toString i}";
@@ -77,6 +90,13 @@ let
         inherit (integration) type settings disableResolveMessage;
       }) list;
     }) contactPoints;
+    templates = [
+      {
+        inherit orgId;
+        name = templates;
+        template = messageTemplate;
+      }
+    ];
     muteTimes = [
       {
         inherit orgId;
@@ -129,6 +149,10 @@ let
         "muteTimeInterval"
         always
       ]
+      [
+        "template"
+        templates
+      ]
     ]
   );
 
@@ -161,12 +185,14 @@ let
       'deleteContactPoints', coalesce(json_agg(json_build_object('orgId', org_id, 'uid', record_key))
         FILTER (WHERE record_type = 'contactPoint'), '[]'),
       'deleteMuteTimes', coalesce(json_agg(json_build_object('orgId', org_id, 'name', record_key))
-        FILTER (WHERE record_type = 'muteTimeInterval'), '[]')
+        FILTER (WHERE record_type = 'muteTimeInterval'), '[]'),
+      'deleteTemplates', coalesce(json_agg(json_build_object('orgId', org_id, 'name', record_key))
+        FILTER (WHERE record_type = 'template'), '[]')
     )
     FROM provenance_type
     WHERE org_id = ${toString orgId}
       AND provenance = 'file'
-      AND record_type IN ('alertRule', 'contactPoint', 'muteTimeInterval')
+      AND record_type IN ('alertRule', 'contactPoint', 'muteTimeInterval', 'template')
       AND record_key LIKE 'hl-%'
       AND NOT EXISTS (
         SELECT 1 FROM jsonb_array_elements(:'keep'::jsonb) k
@@ -301,6 +327,19 @@ in
         description = "How often a firing warning is notified again.";
         type = lib.types.str;
         default = "12h";
+      };
+    };
+    messages = lib.mkOption {
+      description = ''
+        Notification texts for a contact point's settings, from the templates this module provisions: `title`, a
+        short title, and `message`, the summaries of the alerts in HTML. Pass them as the integration's own
+        settings (`title` and `message` for pushover, webhook and others).
+      '';
+      type = lib.types.attrsOf lib.types.str;
+      readOnly = true;
+      default = {
+        title = ''{{ template "hl.title" . }}'';
+        message = ''{{ template "hl.message" . }}'';
       };
     };
     prune = lib.mkOption {
