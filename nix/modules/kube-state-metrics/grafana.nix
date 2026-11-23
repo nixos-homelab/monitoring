@@ -40,9 +40,13 @@ let
     warn = 1;
     crit = 3;
   };
+  # A Job keeps the pods of its failed tries after a later one succeeds; those count toward neither side
+  retriedJobPods = ''
+    kube_pod_status_phase{phase="Failed"} == 1 and on (namespace, pod) (kube_pod_owner{owner_kind="Job"}
+      and on (namespace, owner_name) label_replace(kube_job_status_succeeded > 0, "owner_name", "$1", "job_name", "(.+)"))'';
   healthyPods = sel: {
     good = ''count(kube_pod_status_phase{${sel}phase=~"Running|Succeeded"} == 1)'';
-    all = "count(kube_pod_status_phase{${sel}} == 1)";
+    all = "count(kube_pod_status_phase{${sel}} == 1 unless on (namespace, pod) (${retriedJobPods}))";
   };
   # Each Deployment's available and desired replicas side by side
   replicas =
@@ -230,7 +234,7 @@ in
       };
       pods = {
         title = "Pods";
-        description = "pods Running or Succeeded";
+        description = "pods Running or Succeeded, not counting the failed tries of Jobs that later succeeded";
         order = 210;
       }
       // healthyPods "";
@@ -284,7 +288,7 @@ in
           g.ratio (
             {
               title = "Pods healthy";
-              description = "Pods running or finished, of all of them; the rest are pending, failed or unknown. Orange with any of those, red with half";
+              description = "Pods running or finished, of all of them; the rest are pending, failed or unknown. The failed tries of a Job that later succeeded count toward neither. Orange with any of those, red with half";
             }
             // healthyPods ""
           )
