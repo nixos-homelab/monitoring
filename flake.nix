@@ -126,6 +126,11 @@
             };
           in
           {
+            # One lock node per homelab repo
+            checks.flake-lock = inputs.homelab-shared.lib.checks.flakeLock {
+              inherit pkgs;
+              lockFile = ./flake.lock;
+            };
             # Dead Nix code. Pattern names stay: modules take { config, lib, pkgs, ... } whether they use them or not
             checks.deadnix = pkgs.runCommand "deadnix" { nativeBuildInputs = [ pkgs.deadnix ]; } ''
               deadnix --fail --no-lambda-pattern-names ${self}
@@ -159,6 +164,16 @@
             checks.logql = self.lib.logs.queries {
               inherit pkgs;
               inherit (machine) config;
+              # The journal stream of shared's k3s tile on the Cluster board, as shared's own logql check has it
+              streams = [
+                {
+                  source = "journal";
+                  node = "nas";
+                  unit = "k3s.service";
+                  program = "k3s";
+                  service_name = "k3s";
+                }
+              ];
             };
             # Grafana with storage's PostgreSQL on one node on k3s' bundled network, under the NixOS test driver (needs
             # KVM)
