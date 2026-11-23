@@ -228,6 +228,12 @@ contactPoints.phone = [
 ];
 ```
 
+With Mimir enabled, the Alerts dashboard shows what fires now and what fired over its time range: counts by
+severity, pending alerts, failing rules and silences, the firing list, a timeline per rule, and the notifications
+sent. Grafana keeps its alert state history as annotations, which only its alerting pages read, so the module adds
+Mimir as a second state history backend: Grafana writes each alert instance that isn't normal as the series
+`GRAFANA_ALERTS`, with the rule's title as `alertname`, its labels, and `grafana_alertstate`.
+
 Grafana provisions alerting from files at start only and deletes nothing that drops out of them, so an init
 container in its pod compares what this configuration provisions with what Grafana's database says was provisioned
 from files before, and has Grafana delete the difference. Only what carries the module's `hl-` prefix: rules made in
