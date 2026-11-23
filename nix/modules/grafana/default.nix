@@ -128,6 +128,7 @@ in
     ./homepage.nix
     ./metrics.nix
     ./alerting.nix
+    ./alerts-dashboard.nix
     ../alloy/alerts.nix
   ];
   config = lib.mkIf cfg.enable {

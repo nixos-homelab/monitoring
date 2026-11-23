@@ -698,6 +698,31 @@ let
       };
       kube_job_failed.absent = true;
       kube_job_status_active.absent = true;
+      # Grafana's alert state history: nothing but normal, so no series
+      GRAFANA_ALERTS = {
+        absent = true;
+        labels = {
+          alertname = [
+            "Workload unavailable"
+            "Job failed"
+            "Health issue"
+          ];
+          grafana_alertstate = [
+            "alerting"
+            "pending"
+            "error"
+          ];
+        };
+      };
+      grafana_alerting_silences.value = 0;
+      grafana_alerting_notifications_total = {
+        labels.integration = [ "pushover" ];
+        rate = 0;
+      };
+      grafana_alerting_notifications_failed_total = {
+        labels.integration = [ "pushover" ];
+        absent = true;
+      };
       kube_cronjob_status_last_schedule_time = {
         labels.cronjob = [
           "postgresql-backup"
@@ -974,6 +999,94 @@ let
         labels.message = [ "Indexers unavailable due to failures: 1337x" ];
         value = 1;
       };
+      # The alerts of the above: rtorrent pending, then firing; the failed job and Sonarr's health issue firing
+      GRAFANA_ALERTS.where = [
+        {
+          match = {
+            alertname = "Workload unavailable";
+            severity = "critical";
+            grafana_alertstate = "pending";
+          };
+          steps = [
+            [
+              0.71
+              { absent = false; }
+            ]
+            [
+              0.74
+              { absent = true; }
+            ]
+          ];
+          value = 1;
+        }
+        {
+          match = {
+            alertname = "Workload unavailable";
+            severity = "critical";
+            grafana_alertstate = "alerting";
+          };
+          steps = [
+            [
+              0.74
+              { absent = false; }
+            ]
+          ];
+          value = 1;
+        }
+        {
+          match = {
+            alertname = "Job failed";
+            severity = "warning";
+            grafana_alertstate = "alerting";
+          };
+          steps = [
+            [
+              0.2
+              { absent = false; }
+            ]
+          ];
+          value = 1;
+        }
+        {
+          match = {
+            alertname = "Health issue";
+            severity = "info";
+            grafana_alertstate = "pending";
+          };
+          steps = [
+            [
+              0.38
+              { absent = false; }
+            ]
+            [
+              0.4
+              { absent = true; }
+            ]
+          ];
+          value = 1;
+        }
+        {
+          match = {
+            alertname = "Health issue";
+            severity = "info";
+            grafana_alertstate = "alerting";
+          };
+          steps = [
+            [
+              0.4
+              { absent = false; }
+            ]
+          ];
+          value = 1;
+        }
+      ];
+      grafana_alerting_silences.where = [
+        {
+          match.state = "active";
+          value = 1;
+        }
+      ];
+      grafana_alerting_notifications_total.rate = 0.0005;
       node_hwmon_temp_celsius.range = [
         66
         74
@@ -1023,6 +1136,10 @@ let
       ];
       up.value = 0;
       rtorrent_up.value = 0;
+      grafana_alerting_notifications_failed_total = {
+        absent = false;
+        rate = 0.0005;
+      };
       certmanager_certificate_expiration_timestamp_seconds.fromEnd = -86400;
       node_hwmon_temp_celsius.range = [
         86

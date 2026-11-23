@@ -29,6 +29,10 @@ let
     panel = g.alertlist {
       title = "Firing";
       description = "Alerts firing or about to (pending), and rules that fail to evaluate; a row opens the rule";
+      links = lib.optional config.homelab.mimir.enable {
+        title = "Alerts";
+        url = "/d/alerts/alerts?\${__url_time_range}";
+      };
       options = {
         viewMode = "list";
         groupMode = "default";
