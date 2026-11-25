@@ -328,6 +328,8 @@ in
                       "/etc/alloy/alloy-config.alloy"
                       "--storage.path=/data"
                       "--server.http.listen-addr=0.0.0.0:3000"
+                      # Its usage report goes to stats.grafana.org, which it has no egress to: a warning every 4 h
+                      "--disable-reporting"
                     ];
                     env.HOSTNAME.valueFrom.fieldRef.fieldPath = "spec.nodeName";
                     readinessProbe = {
