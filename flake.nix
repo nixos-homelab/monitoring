@@ -84,7 +84,12 @@
           };
         };
         perSystem =
-          { pkgs, lib, ... }:
+          {
+            config,
+            pkgs,
+            lib,
+            ...
+          }:
           let
             # Every module of this flake on, with the check dashboard as the home dashboard
             everything = {
@@ -175,11 +180,20 @@
                 }
               ];
             };
-            # Grafana with storage's PostgreSQL on one node on k3s' bundled network, under the NixOS test driver (needs
-            # KVM)
-            checks.grafana-cluster = import ./nix/tests/grafana.nix { inherit self inputs pkgs; };
-            # Alloy shipping the pods' and the journal's logs to Loki on one node on k3s' bundled network (needs KVM)
-            checks.logs-cluster = import ./nix/tests/logs.nix { inherit self inputs pkgs; };
+            # The VM tests, under the NixOS test driver (needs KVM): `nix build .#nixosTests.<name>`. They stay out of the
+            # checks, so a plain `nix flake check` takes minutes; CI runs both
+            legacyPackages.nixosTests = {
+              # Grafana with storage's PostgreSQL on one node on k3s' bundled network
+              grafana = import ./nix/tests/grafana.nix { inherit self inputs pkgs; };
+              # Alloy shipping the pods' and the journal's logs to Loki on one node on k3s' bundled network
+              logs = import ./nix/tests/logs.nix { inherit self inputs pkgs; };
+            };
+            # That the VM tests evaluate, without building or running them
+            checks.nixos-tests = pkgs.writeText "nixos-tests" (
+              lib.concatMapStringsSep "\n" (test: builtins.unsafeDiscardOutputDependency test.drvPath) (
+                lib.attrValues config.legacyPackages.nixosTests
+              )
+            );
             packages = {
               options-docs = inputs.docs.lib.docs.options {
                 inherit pkgs;
