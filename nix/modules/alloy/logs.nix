@@ -266,8 +266,9 @@ let
       }
     ) cfg.journal
   );
-  # The sources' enabled demotions, each a match on its source's labels: a regex on the final message marks the record,
-  # a template lowers its level. Each demotion marks under a key of its own, so one can't set off another's level
+  # The sources' enabled demotions, each a match on its source's labels: a regex on the final message and one on each
+  # field it names mark the record, a template lowers its level when all of them did. Each demotion marks under keys of
+  # its own, so one can't set off another's level
   demotions = lib.concatLists (
     lib.mapAttrsToList (
       _: s:
@@ -283,19 +284,36 @@ let
     ) cfg.journal
   );
   demoteStages = lib.concatStrings (
-    lib.imap0 (i: d: ''
-      stage.match {
-        selector = ${str "{${lib.concatStringsSep ", " d.matchers}}"}
-        stage.regex {
-          source     = "message"
-          expression = ${str "(?s)(?P<demote_${toString i}>^(?:${d.expression})$)"}
+    lib.imap0 (
+      i: d:
+      let
+        mark = "demote_${toString i}";
+        fieldMarks = lib.imap0 (j: field: {
+          inherit field;
+          key = "${mark}_${toString j}";
+        }) (lib.attrNames d.fields);
+        marked = lib.concatMapStrings (k: " (index . ${str k})") ([ mark ] ++ map (f: f.key) fieldMarks);
+      in
+      ''
+        stage.match {
+          selector = ${str "{${lib.concatStringsSep ", " d.matchers}}"}
+          stage.regex {
+            source     = "message"
+            expression = ${str "(?s)(?P<${mark}>^(?:${d.expression})$)"}
+          }
+          ${lib.concatMapStrings (f: ''
+            stage.regex {
+              source     = ${str f.field}
+              expression = ${str "(?s)(?P<${f.key}>^(?:${d.fields.${f.field}})$)"}
+            }
+          '') fieldMarks}
+          stage.template {
+            source   = "level"
+            template = ${str ''{{ if and${marked} }}${d.level}{{ else }}{{ .Value }}{{ end }}''}
+          }
         }
-        stage.template {
-          source   = "level"
-          template = ${str ''{{ if index . "demote_${toString i}" }}${d.level}{{ else }}{{ .Value }}{{ end }}''}
-        }
-      }
-    '') demotions
+      ''
+    ) demotions
   );
   # Lines of pods no module describes: the shape of the line picks a generic format
   fallbackStages = source: ''
@@ -555,6 +573,15 @@ let
           expression = lib.mkOption {
             description = "An RE2 regular expression the whole message matches, after parsing and redaction.";
             type = lib.types.str;
+          };
+          fields = lib.mkOption {
+            description = ''
+              RE2 regular expressions by canonical field name (`error`, `component`, ...): the whole value of each field
+              must match as well, for a message that says little and leaves the rest to its fields.
+            '';
+            type = lib.types.attrsOf lib.types.str;
+            default = { };
+            example.error = "error syncing CronJobController .*";
           };
           level = lib.mkOption {
             description = "The level they get: one of the names in `homelab.alloy.logs.levels`.";
