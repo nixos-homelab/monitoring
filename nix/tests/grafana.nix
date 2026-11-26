@@ -27,15 +27,8 @@ pkgs.testers.runNixOSTest {
           bundledNetworking = true;
           dataDir = lib.mkForce "/var/lib/k3s";
         };
-        # The volumes of PostgreSQL, from the node's own export as on the NAS
-        nfs-provisioner = {
-          enable = true;
-          path = "/srv/nfs";
-          mountpointOwnership = {
-            uid = 900;
-            gid = 900;
-          };
-        };
+        # The volumes of PostgreSQL, directories on the node
+        local-path.enable = true;
         workloads.securityContext = {
           runAsUser = 900;
           runAsGroup = 900;
@@ -48,22 +41,15 @@ pkgs.testers.runNixOSTest {
           dashboards.check.dashboard = import ../checks/dashboard.nix { inherit (self.lib) grafana; };
         };
       };
-      # On a real machine these are filesystems of their own, which exist before k3s and the NFS server start
+      # On a real machine a filesystem of its own, which exists before k3s starts
       systemd.tmpfiles.rules = [
         "d /var/lib/k3s 0700 root root -"
-        "d /srv/nfs 0750 900 900 -"
       ];
       # The CLI the test runs in place of the activation and service a real machine has, and the test's HTTP client
       environment.systemPackages = [
         config.setup-secrets.script
         pkgs.curl
       ];
-      # The node mounts its own export through the FQDN nfs-provisioner defaults to, which points at loopback
-      networking.hosts."127.0.0.2" = [ "node.${config.homelab.workloads.domain}" ];
-      services.nfs.server = {
-        enable = true;
-        exports = "/srv/nfs 127.0.0.0/8(rw,root_squash,anonuid=900,anongid=900)\n";
-      };
       # k3s waits for a default route; the test network has none
       networking.defaultGateway = {
         address = "192.168.1.254";

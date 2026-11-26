@@ -27,15 +27,8 @@ pkgs.testers.runNixOSTest {
           bundledNetworking = true;
           dataDir = lib.mkForce "/var/lib/k3s";
         };
-        # The volumes of Alloy and Loki, from the node's own export as on the NAS
-        nfs-provisioner = {
-          enable = true;
-          path = "/srv/nfs";
-          mountpointOwnership = {
-            uid = 900;
-            gid = 900;
-          };
-        };
+        # The volumes of Alloy and Loki, directories on the node
+        local-path.enable = true;
         workloads.securityContext = {
           runAsUser = 900;
           runAsGroup = 900;
@@ -45,14 +38,8 @@ pkgs.testers.runNixOSTest {
       };
       systemd.tmpfiles.rules = [
         "d /var/lib/k3s 0700 root root -"
-        "d /srv/nfs 0750 900 900 -"
       ];
       environment.systemPackages = [ pkgs.curl ];
-      networking.hosts."127.0.0.2" = [ "node.${config.homelab.workloads.domain}" ];
-      services.nfs.server = {
-        enable = true;
-        exports = "/srv/nfs 127.0.0.0/8(rw,root_squash,anonuid=900,anongid=900)\n";
-      };
       # k3s waits for a default route; the test network has none
       networking.defaultGateway = {
         address = "192.168.1.254";
